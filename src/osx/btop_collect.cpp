@@ -72,12 +72,15 @@ tab-size = 4
 #define kIOMainPortDefault kIOMasterPortDefault
 #endif
 
+#include "powermetrics.hpp"
+
 using std::clamp, std::string_literals::operator""s, std::cmp_equal, std::cmp_less, std::cmp_greater;
 using std::ifstream, std::numeric_limits, std::streamsize, std::round, std::max, std::min;
 namespace fs = std::filesystem;
 namespace rng = std::ranges;
 using namespace Tools;
 
+Powermetrics privilegedInfo;
 //? --------------------------------------------------- FUNCTIONS -----------------------------------------------------
 
 namespace Cpu {
@@ -123,17 +126,34 @@ namespace Mem {
 		virtual ~MachProcessorInfo() {vm_deallocate(mach_task_self(), (vm_address_t)info_array, (vm_size_t)sizeof(processor_info_array_t) * info_count);}
 	};
 
-namespace Shared {
+namespace Gpu {
+	vector<gpu_info> gpus;
+	#ifdef GPU_SUPPORT
+    //? Apple Silicon
+    namespace Agx {
+		bool initialized = false;
+		size_t device_count = 0;
 
+		bool init();
+		bool shutdown();
+		template <bool is_init>
+		bool collect(gpu_info* gpus_slice);
+    }
+	auto collect(bool no_update) -> vector<gpu_info>&;
+	#endif
+}
+
+
+namespace Shared {
 	fs::path passwd_path;
 	uint64_t totalMem;
 	long pageSize, coreCount, clkTck, physicalCoreCount, arg_max;
 	double machTck;
 	int totalMem_len;
-
 	void init() {
-		//? Shared global variables init
+		privilegedInfo.start();
 
+		//? Shared global variables init		
 		coreCount = sysconf(_SC_NPROCESSORS_ONLN); // this returns all logical cores (threads)
 		if (coreCount < 1) {
 			coreCount = 1;
@@ -191,6 +211,10 @@ namespace Shared {
 		//? Init for namespace Mem
 		Mem::old_uptime = system_uptime();
 		Mem::collect();
+
+		#ifdef GPU_SUPPORT
+		    Gpu::Agx::init();
+		#endif
 	}
 
 }  // namespace Shared
@@ -1437,3 +1461,118 @@ namespace Tools {
 		return 0.0;
 	}
 }  // namespace Tools
+
+
+namespace Gpu {
+#ifdef GPU_SUPPORT
+	namespace Agx {
+		bool init() {
+			if(!privilegedInfo.available())
+				return false;
+
+			device_count = 1;
+			const size_t index = gpus.size();
+			gpus.emplace_back();
+			gpu_names.emplace_back("Apple Silicon GPU");
+
+			initialized = true;
+			collect<true>(&gpus[index]);
+			return true;
+		}
+
+		bool shutdown() {
+			initialized = false;
+			return true;
+		}
+
+		template <bool is_init>
+		bool collect(gpu_info* gpu) {
+			if (!initialized || gpu == nullptr)
+				return false;
+
+			if constexpr (is_init) {
+				gpu->supported_functions = {
+					.gpu_utilization = true,
+					.gpu_clock       = true,
+					.pwr_usage       = true,
+
+					.mem_utilization = false,
+					.mem_total       = false,
+					.mem_used        = false,
+					.mem_clock       = false,
+
+					.pcie_txrx       = false,
+					.pwr_state       = false,
+					.temp_info       = false,
+
+					.encoder_utilization = false,
+					.decoder_utilization = false
+				};
+				gpu->gpu_percent["gpu-totals"].push_back(0);
+				gpu->gpu_percent["gpu-pwr-totals"].push_back(0);
+				gpu->gpu_clock_speed = 0;
+			}
+
+			Powermetrics::GpuInfo info;
+
+			if (!privilegedInfo.sampleGPU(info))
+				return false;
+
+			gpu->gpu_percent["gpu-totals"].push_back(100 - info.idle_residency);
+			gpu->gpu_percent["gpu-pwr-totals"].push_back(info.power_mw);
+			gpu->gpu_clock_speed = info.active_freq_mhz;
+			gpu->pwr_usage = info.power_mw;
+			return true;
+		}
+
+	} // namespace Agx
+
+	auto collect(bool no_update) -> vector<gpu_info>& {
+		if (Runner::stopping || (no_update && !gpus.empty()))
+			return gpus;
+
+		Agx::collect<false>(gpus.data());
+
+		long long gpu_sum = 0;
+		long long pwr_sum = 0;
+
+		for (auto& gpu : gpus) {
+			if (gpu.supported_functions.gpu_utilization &&
+				!gpu.gpu_percent["gpu-totals"].empty())
+				gpu_sum += gpu.gpu_percent["gpu-totals"].back();
+
+			if (gpu.supported_functions.pwr_usage &&
+				!gpu.gpu_percent["gpu-pwr-totals"].empty())
+				pwr_sum += gpu.gpu_percent["gpu-pwr-totals"].back();
+
+			// --- trim ---
+			if (width == 0) continue;
+
+			while (cmp_greater(gpu.gpu_percent["gpu-totals"].size(), width * 2))
+				gpu.gpu_percent["gpu-totals"].pop_front();
+
+			while (cmp_greater(gpu.gpu_percent["gpu-pwr-totals"].size(), width))
+				gpu.gpu_percent["gpu-pwr-totals"].pop_front();
+
+			while (cmp_greater(gpu.temp.size(), 18))
+				gpu.temp.pop_front();
+		}
+
+		if (!gpus.empty()) {
+			shared_gpu_percent["gpu-average"].push_back(gpu_sum / gpus.size());
+			shared_gpu_percent["gpu-pwr-total"].push_back(pwr_sum);
+		}
+
+		if (width != 0) {
+			while (cmp_greater(shared_gpu_percent["gpu-average"].size(), width * 2))
+				shared_gpu_percent["gpu-average"].pop_front();
+
+			while (cmp_greater(shared_gpu_percent["gpu-pwr-total"].size(), width * 2))
+				shared_gpu_percent["gpu-pwr-total"].pop_front();
+		}
+
+		count = gpus.size();
+		return gpus;
+	}
+#endif
+}

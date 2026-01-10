@@ -223,8 +223,12 @@ void clean_quit(int sig) {
 	}
 
 #ifdef GPU_SUPPORT
+#ifndef __APPLE__
 	Gpu::Nvml::shutdown();
 	Gpu::Rsmi::shutdown();
+#else 
+	Gpu::Agx::shutdown();
+#endif
 #endif
 
 

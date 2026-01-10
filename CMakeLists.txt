@@ -200,6 +200,13 @@ endif()
 
 # Other platform dependent flags
 if(APPLE)
+  if(BTOP_GPU)
+    target_compile_definitions(libbtop PUBLIC GPU_SUPPORT)
+    target_sources(libbtop PRIVATE
+      src/osx/powermetrics.cpp
+    )
+  endif()
+  
   target_link_libraries(libbtop
     $<LINK_LIBRARY:FRAMEWORK,CoreFoundation> $<LINK_LIBRARY:FRAMEWORK,IOKit>
   )
