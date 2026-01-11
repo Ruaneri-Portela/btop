@@ -52,7 +52,6 @@ tab-size = 4
 #include <mutex>
 #include <numeric>
 #include <ranges>
-#include <regex>
 #include <string>
 #include <unordered_set>
 
@@ -72,7 +71,9 @@ tab-size = 4
 #define kIOMainPortDefault kIOMasterPortDefault
 #endif
 
+#include "iogpu.hpp"
 #include "powermetrics.hpp"
+Powermetrics privilegedInfo;
 
 using std::clamp, std::string_literals::operator""s, std::cmp_equal, std::cmp_less, std::cmp_greater;
 using std::ifstream, std::numeric_limits, std::streamsize, std::round, std::max, std::min;
@@ -80,7 +81,7 @@ namespace fs = std::filesystem;
 namespace rng = std::ranges;
 using namespace Tools;
 
-Powermetrics privilegedInfo;
+
 //? --------------------------------------------------- FUNCTIONS -----------------------------------------------------
 
 namespace Cpu {
@@ -127,21 +128,44 @@ namespace Mem {
 	};
 
 namespace Gpu {
-	vector<gpu_info> gpus;
-	#ifdef GPU_SUPPORT
-    //? Apple Silicon
-    namespace Agx {
-		bool initialized = false;
-		size_t device_count = 0;
 
-		bool init();
-		bool shutdown();
-		template <bool is_init>
-		bool collect(gpu_info* gpus_slice);
-    }
-	auto collect(bool no_update) -> vector<gpu_info>&;
-	#endif
-}
+    // List of all GPU information
+    std::vector<gpu_info> gpus;
+
+#ifdef GPU_SUPPORT
+
+    // ----------------------------------------
+    // Apple Silicon specific GPU handling
+    // ----------------------------------------
+    namespace Agx {
+
+        // Initialization state
+        bool initialized = false;
+
+        // Number of GPU devices
+        size_t device_count = 0;
+
+        // IOGPU interface for Apple GPUs
+        IOGPU io_gpu;
+
+        // Initializes Apple Silicon GPU monitoring
+        bool init();
+
+        // Shuts down Apple Silicon GPU monitoring
+        bool shutdown();
+
+        // Collects GPU metrics into the provided slice
+        template <bool is_init>
+        bool collect(gpu_info* gpus_slice);
+
+    } // namespace Agx
+
+    // Collects GPU metrics; optionally skips updating the underlying GPU list
+    auto collect(bool no_update) -> std::vector<gpu_info>&;
+
+#endif // GPU_SUPPORT
+
+} // namespace Gpu
 
 
 namespace Shared {
@@ -213,8 +237,31 @@ namespace Shared {
 		Mem::collect();
 
 		#ifdef GPU_SUPPORT
-		    Gpu::Agx::init();
+		auto shown_gpus = Config::getS("shown_gpus");
+
+		if (shown_gpus.contains("apple")) {
+			Gpu::Agx::init();
+		}
+
+
+		if (not Gpu::gpu_names.empty()) {
+			for (auto const& [key, _] : Gpu::gpus[0].gpu_percent)
+				Cpu::available_fields.push_back(key);
+			for (auto const& [key, _] : Gpu::shared_gpu_percent)
+				Cpu::available_fields.push_back(key);
+
+			using namespace Gpu;
+			count = gpus.size();
+			gpu_b_height_offsets.resize(gpus.size());
+			for (size_t i = 0; i < gpu_b_height_offsets.size(); ++i)
+				gpu_b_height_offsets[i] = gpus[i].supported_functions.gpu_utilization
+					+ gpus[i].supported_functions.pwr_usage
+					+ (gpus[i].supported_functions.encoder_utilization or gpus[i].supported_functions.decoder_utilization)
+					+ (gpus[i].supported_functions.mem_total or gpus[i].supported_functions.mem_used)
+						* (1 + 2*(gpus[i].supported_functions.mem_total and gpus[i].supported_functions.mem_used) + 2*gpus[i].supported_functions.mem_utilization);
+		}
 		#endif
+
 	}
 
 }  // namespace Shared
@@ -224,6 +271,9 @@ namespace Cpu {
 	string cpuHz;
 	bool has_battery = true;
 	bool macM1 = false;
+
+	Powermetrics::CpuInfo info;
+
 	tuple<int, float, long, string> current_bat;
 
 	const array<string, 10> time_names = {"user", "nice", "system", "idle"};
@@ -325,17 +375,31 @@ namespace Cpu {
 		}
 	}
 
-	string get_cpuHz() {
+	std::string get_cpuHz() {
 		unsigned int freq = 1;
 		size_t size = sizeof(freq);
-
 		int mib[] = {CTL_HW, HW_CPU_FREQ};
 
 		if (sysctl(mib, 2, &freq, &size, nullptr, 0) < 0) {
-			// this fails on Apple Silicon macs. Apparently you're not allowed to know
-			return "";
+			if (info.avg_freq_mhz == 0)
+				return "";
+			freq = info.avg_freq_mhz * 1000000;
 		}
-		return std::to_string(freq / 1000.0 / 1000.0 / 1000.0).substr(0, 3);
+
+		if (freq < 1000000000) {
+			unsigned int freq_mhz = freq / 1000000;
+			return std::to_string(freq_mhz) + " MHz";
+		} 
+		else {
+			float freq_ghz = freq / 1000000000.0f;
+				
+			unsigned int int_part = static_cast<unsigned int>(freq_ghz);
+			unsigned int dec_part = static_cast<unsigned int>((freq_ghz - int_part) * 100);
+
+			char buf[16];
+			snprintf(buf, sizeof(buf), "%u.%02u GHz", int_part, dec_part);
+			return std::string(buf);
+		}
 	}
 
 	auto get_core_mapping() -> std::unordered_map<int, int> {
@@ -454,6 +518,11 @@ namespace Cpu {
 		if (Runner::stopping or (no_update and not current_cpu.cpu_percent.at("total").empty()))
 			return current_cpu;
 		auto &cpu = current_cpu;
+
+		if(privilegedInfo.sampleCPU(info)){
+			supports_watts = true;
+			cpu.usage_watts = static_cast<float>(info.power_mw) / 1000.0f;
+		};
 
 		if (getloadavg(cpu.load_avg.data(), cpu.load_avg.size()) < 0) {
 			Logger::error("failed to get load averages");
@@ -1464,115 +1533,165 @@ namespace Tools {
 
 
 namespace Gpu {
+
 #ifdef GPU_SUPPORT
-	namespace Agx {
-		bool init() {
-			if(!privilegedInfo.available())
-				return false;
 
-			device_count = 1;
-			const size_t index = gpus.size();
-			gpus.emplace_back();
-			gpu_names.emplace_back("Apple Silicon GPU");
+    // ----------------------------------------
+    // Apple Silicon specific GPU handling
+    // ----------------------------------------
+    namespace Agx {
+        // Initialize Apple Silicon GPU monitoring
+        bool init() {
+            if (!privilegedInfo.available())
+                return false;
 
-			initialized = true;
-			collect<true>(&gpus[index]);
-			return true;
-		}
+            device_count = 1;
+            const size_t index = gpus.size();
+            gpus.emplace_back();
 
-		bool shutdown() {
-			initialized = false;
-			return true;
-		}
+            auto io_gpus = io_gpu.GetGPUList();
+            if (io_gpus.empty())
+                return false;
 
-		template <bool is_init>
-		bool collect(gpu_info* gpu) {
-			if (!initialized || gpu == nullptr)
-				return false;
+            gpu_names.emplace_back(io_gpus[0].GetModel());
 
-			if constexpr (is_init) {
-				gpu->supported_functions = {
-					.gpu_utilization = true,
-					.gpu_clock       = true,
-					.pwr_usage       = true,
+            initialized = true;
+            collect<true>(&gpus[index]);
+            return true;
+        }
 
-					.mem_utilization = false,
-					.mem_total       = false,
-					.mem_used        = false,
-					.mem_clock       = false,
+        // Shutdown Apple Silicon GPU monitoring
+        bool shutdown() {
+            initialized = false;
+            return true;
+        }
 
-					.pcie_txrx       = false,
-					.pwr_state       = false,
-					.temp_info       = false,
+        // Collect GPU metrics into the provided slice
+        template <bool is_init>
+        bool collect(gpu_info* gpus_slice) {
+            if (!initialized) 
+                return false;
 
-					.encoder_utilization = false,
-					.decoder_utilization = false
-				};
-				gpu->gpu_percent["gpu-totals"].push_back(0);
-				gpu->gpu_percent["gpu-pwr-totals"].push_back(0);
-				gpu->gpu_clock_speed = 0;
+            if constexpr (is_init) {
+                gpus_slice->supported_functions = {
+                    .gpu_utilization = true,
+                    .mem_utilization = false,
+                    .pwr_usage = false,
+                    .gpu_clock = false,
+                    .mem_total = true,
+                    .mem_used = true,
+                    .mem_clock = false,
+                    .pwr_state = false,
+                    .temp_info = false,
+                    .pcie_txrx = false,
+                    .encoder_utilization = false,
+                    .decoder_utilization = false
+                };
+            }
+
+            io_gpu.Update();
+            auto io_gpus = io_gpu.GetGPUList();
+            if (io_gpus.empty())
+                return false;
+
+            Powermetrics::GpuInfo info;
+            if(privilegedInfo.sampleGPU(info)){
+				gpus_slice->supported_functions.pwr_usage = true;
+				gpus_slice->supported_functions.gpu_clock = true;
+			};
+
+            auto gpu_data = io_gpus[0].GetStats();
+
+            // Update GPU metrics
+            gpus_slice->gpu_percent.at("gpu-totals").push_back(gpu_data.device_utilization);
+
+
+			if(gpus_slice->supported_functions.pwr_usage){
+				gpus_slice->gpu_percent.at("gpu-pwr-totals").push_back(info.power_mw);
+				gpus_slice->pwr_usage = info.power_mw;
 			}
 
-			Powermetrics::GpuInfo info;
+			if(gpus_slice->supported_functions.gpu_clock){
+				gpus_slice->gpu_clock_speed = info.active_freq_mhz;
+			}
 
-			if (!privilegedInfo.sampleGPU(info))
-				return false;
+            gpus_slice->mem_total = gpu_data.alloc_system_memory;
+            gpus_slice->mem_used  = gpu_data.in_use_system_memory;
 
-			gpu->gpu_percent["gpu-totals"].push_back(100 - info.idle_residency);
-			gpu->gpu_percent["gpu-pwr-totals"].push_back(info.power_mw);
-			gpu->gpu_clock_speed = info.active_freq_mhz;
-			gpu->pwr_usage = info.power_mw;
-			return true;
-		}
+            long long mem_percent = 0;
+            if (gpus_slice->mem_total > 0) {
+                mem_percent = static_cast<long long>(
+                    (static_cast<double>(gpus_slice->mem_used) / static_cast<double>(gpus_slice->mem_total)) * 100.0
+                );
+            }
+            gpus_slice->gpu_percent.at("gpu-vram-totals").push_back(mem_percent);
 
-	} // namespace Agx
+            return true;
+        }
 
-	auto collect(bool no_update) -> vector<gpu_info>& {
-		if (Runner::stopping || (no_update && !gpus.empty()))
-			return gpus;
+    } // namespace Agx
 
-		Agx::collect<false>(gpus.data());
+    // ----------------------------------------
+    // Collect GPU metrics (top-level function)
+    // ----------------------------------------
+	// Full based on linux (intel/amd) gpu collect
+    auto collect(bool no_update) -> std::vector<gpu_info>& {
+        if (Runner::stopping || (no_update && !gpus.empty()))
+            return gpus;
 
-		long long gpu_sum = 0;
-		long long pwr_sum = 0;
+        Agx::collect<false>(gpus.data());
 
-		for (auto& gpu : gpus) {
-			if (gpu.supported_functions.gpu_utilization &&
-				!gpu.gpu_percent["gpu-totals"].empty())
-				gpu_sum += gpu.gpu_percent["gpu-totals"].back();
+        //* Calculate average metrics
+        long long avg = 0;
+        long long mem_usage_total = 0;
+        long long mem_total = 0;
+        long long pwr_total = 0;
 
-			if (gpu.supported_functions.pwr_usage &&
-				!gpu.gpu_percent["gpu-pwr-totals"].empty())
-				pwr_sum += gpu.gpu_percent["gpu-pwr-totals"].back();
+        for (auto& gpu : gpus) {
+            if (gpu.supported_functions.gpu_utilization)
+                avg += gpu.gpu_percent.at("gpu-totals").back();
+            if (gpu.supported_functions.mem_used)
+                mem_usage_total += gpu.mem_used;
+            if (gpu.supported_functions.mem_total)
+                mem_total += gpu.mem_total;
+            if (gpu.supported_functions.pwr_usage)
+                pwr_total += gpu.pwr_usage;
 
-			// --- trim ---
-			if (width == 0) continue;
+            //* Trim vectors if they exceed graph width
+            if (width != 0) {
+                while (cmp_greater(gpu.gpu_percent.at("gpu-totals").size(), width * 2)) 
+                    gpu.gpu_percent.at("gpu-totals").pop_front();
+                while (cmp_greater(gpu.mem_utilization_percent.size(), width)) 
+                    gpu.mem_utilization_percent.pop_front();
+                while (cmp_greater(gpu.gpu_percent.at("gpu-pwr-totals").size(), width)) 
+                    gpu.gpu_percent.at("gpu-pwr-totals").pop_front();
+                while (cmp_greater(gpu.temp.size(), 18)) 
+                    gpu.temp.pop_front();
+                while (cmp_greater(gpu.gpu_percent.at("gpu-vram-totals").size(), width / 2)) 
+                    gpu.gpu_percent.at("gpu-vram-totals").pop_front();
+            }
+        }
 
-			while (cmp_greater(gpu.gpu_percent["gpu-totals"].size(), width * 2))
-				gpu.gpu_percent["gpu-totals"].pop_front();
+        // Update shared GPU metrics
+        shared_gpu_percent.at("gpu-average").push_back(avg / gpus.size());
+        if (mem_total != 0)
+            shared_gpu_percent.at("gpu-vram-total").push_back(mem_usage_total / mem_total);
+        if (gpu_pwr_total_max != 0)
+            shared_gpu_percent.at("gpu-pwr-total").push_back(pwr_total / gpu_pwr_total_max);
 
-			while (cmp_greater(gpu.gpu_percent["gpu-pwr-totals"].size(), width))
-				gpu.gpu_percent["gpu-pwr-totals"].pop_front();
+        if (width != 0) {
+            while (cmp_greater(shared_gpu_percent.at("gpu-average").size(), width * 2)) 
+                shared_gpu_percent.at("gpu-average").pop_front();
+            while (cmp_greater(shared_gpu_percent.at("gpu-pwr-total").size(), width * 2)) 
+                shared_gpu_percent.at("gpu-pwr-total").pop_front();
+            while (cmp_greater(shared_gpu_percent.at("gpu-vram-total").size(), width * 2)) 
+                shared_gpu_percent.at("gpu-vram-total").pop_front();
+        }
 
-			while (cmp_greater(gpu.temp.size(), 18))
-				gpu.temp.pop_front();
-		}
+        count = gpus.size();
+        return gpus;
+    }
 
-		if (!gpus.empty()) {
-			shared_gpu_percent["gpu-average"].push_back(gpu_sum / gpus.size());
-			shared_gpu_percent["gpu-pwr-total"].push_back(pwr_sum);
-		}
+#endif // GPU_SUPPORT
 
-		if (width != 0) {
-			while (cmp_greater(shared_gpu_percent["gpu-average"].size(), width * 2))
-				shared_gpu_percent["gpu-average"].pop_front();
-
-			while (cmp_greater(shared_gpu_percent["gpu-pwr-total"].size(), width * 2))
-				shared_gpu_percent["gpu-pwr-total"].pop_front();
-		}
-
-		count = gpus.size();
-		return gpus;
-	}
-#endif
-}
+} // namespace Gpu
