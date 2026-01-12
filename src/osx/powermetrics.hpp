@@ -45,7 +45,7 @@ public:
         uint64_t power_mw = 0;         // mW
         uint64_t avg_freq_mhz = 0;     // MHz
     };
-
+    
 public:
     Powermetrics();
     ~Powermetrics();

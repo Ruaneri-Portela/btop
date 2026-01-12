@@ -204,7 +204,8 @@ if(APPLE)
     target_compile_definitions(libbtop PUBLIC GPU_SUPPORT)
     target_sources(libbtop PRIVATE
       src/osx/powermetrics.cpp
-      src/osx/iogpu.cpp
+      src/osx/iokit.cpp
+      src/osx/gpu.cpp
     )
   endif()
   
