@@ -42,6 +42,8 @@ CFDictionaryRef CreateHidMatching(int page, int usage) {
 	CFDictionaryRef dict = CFDictionaryCreate(0, (const void **)keys, (const void **)nums, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 	CFRelease(keys[0]);
 	CFRelease(keys[1]);
+	CFRelease(nums[0]);
+	CFRelease(nums[1]);
 	return dict;
 }
 
@@ -72,10 +74,8 @@ long long Cpu::ThermalSensors::getSensors() {
 			if (sc) {
 				CFStringRef name = IOHIDServiceClientCopyProperty(sc, CFSTR("Product"));  // here we use ...CopyProperty
 				if (name) {
-					char buf[200];
-					CFStringGetCString(name, buf, 200, kCFStringEncodingASCII);
-					std::string n(buf);
-
+					std::string n = SafeCFStringToStdString(name).value_or("");
+					
 					if (n.starts_with("eACC") or n.starts_with("pACC")) {
 						temps.push_back(getValue(sc));
 					}

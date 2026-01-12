@@ -1,3 +1,21 @@
+/* Copyright 2026 Ruaneri Portela (ruaneriportela@outlook.com)
+   Copyright 2026 Emanuele Zattin (Emanuelez@gmail.com)
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+   indent = tab
+   tab-size = 4
+*/
 #include "gpu.hpp"
 #include "iokit.hpp"
 #include <algorithm>
@@ -13,8 +31,8 @@ static uint64_t getTimeNs() {
   return mach_absolute_time() * timebase.numer / timebase.denom;
 }
 
+// This non work with same reason what in sensors.cpp
 static double GetGpuTemperature() {
-  //? Try IOHIDSensors first (works on M1 and some M2/M3)
   CFDictionaryRef matching = CreateHidMatching(0xff00, 5);
   IOHIDEventSystemClientRef system =
       IOHIDEventSystemClientCreate(kCFAllocatorDefault);
@@ -35,8 +53,8 @@ static double GetGpuTemperature() {
           std::string sensor_name = SafeCFStringToStdString(name).value_or("");
           CFRelease(name);
 
-          //? Look for GPU temperature sensors (e.g., "GPU MTR Temp Sensor1")
-          //? or general GPU temp sensors
+          // In M4 CPU show all cores temperatures, but need to parser
+
           if (sensor_name.find("GPU") != std::string::npos) {
             IOHIDEventRef event = IOHIDServiceClientCopyEvent(
                 service, kIOHIDEventTypeTemperature, 0, 0);
@@ -54,6 +72,8 @@ static double GetGpuTemperature() {
     }
     CFRelease(services);
   }
+  CFRelease(matching);
+  CFRelease(system);
   return gpu_temp;
 }
 
@@ -166,9 +186,9 @@ GPUActivities::GPUActivities(io_object_t entry) {
         }
       }
       usage.emplace_back(newUsage);
-      CFRelease(usageStats);
     }
   }
+  CFRelease(appUsageRef);
 }
 
 // GPU
@@ -294,7 +314,7 @@ void GPU::Lookup(io_object_t ioAccelerator) {
 }
 
 GPU::GPU(io_object_t ioAccelerator) {
-
+  // Save full path to fast refesh on some stats, eg. memeory
   io_name_t pathBuffer;
   if (IORegistryEntryGetPath(ioAccelerator, kIOServicePlane, pathBuffer) !=
       KERN_SUCCESS)
@@ -324,12 +344,13 @@ GPU::GPU(io_object_t ioAccelerator) {
       static_cast<CFNumberRef>(IORegistryEntryCreateCFProperty(
           ioAccelerator, CFSTR("gpu-core-count"), kCFAllocatorDefault, 0));
 
-  IOServiceGenericIterator("AppleARMIODevice", appleArmIoDeviceIteratorCallback,
-                           this);
   if (coreCountRef) {
     core_count = SafeCFNumberToInt64(coreCountRef).value_or(0);
     CFRelease(coreCountRef);
   }
+
+  IOServiceGenericIterator("AppleARMIODevice", appleArmIoDeviceIteratorCallback,
+                           this);
 
   Lookup(ioAccelerator);
 
@@ -357,7 +378,7 @@ GPU::GPU(io_object_t ioAccelerator) {
     return;
   }
 
-  //? Merge channels
+  // Merge channels
   channels =
       CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, gpu_stats_channels);
 
@@ -365,7 +386,7 @@ GPU::GPU(io_object_t ioAccelerator) {
   CFRelease(gpu_stats_channels);
   CFRelease(energy_channels);
 
-  //? Create subscription
+  // Create subscription
   CFMutableDictionaryRef sub_channels = nullptr;
   subscription = IOReport::CreateSubscription(nullptr, channels, &sub_channels,
                                               0, nullptr);
@@ -374,10 +395,10 @@ GPU::GPU(io_object_t ioAccelerator) {
     return;
   }
 
-  //? Take initial sample
+  // Take Initial Sample
   prevSample = IOReport::CreateSamples(subscription, channels, nullptr);
+  CFRelease(sub_channels);
   prevSampleTime = getTimeNs();
-
   return;
 }
 
@@ -414,6 +435,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
         SafeCFStringToStdString(IOReport::ChannelGetDriverName(channel))
             .value_or("");
 
+    // Filter driver name on Channel values
     if (driver_name.find(driver) == std::string::npos)
       continue;
 
@@ -426,7 +448,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
         SafeCFStringToStdString(IOReport::ChannelGetChannelName(channel))
             .value_or("");
 
-    // --- GPU Performance States ---
+    // GPU Performance States
     if (group == "GPU Stats" && subgroup == "GPU Performance States" &&
         channel_name == "GPUPH") {
 
@@ -482,7 +504,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
       }
     }
 
-    // --- Temperature ---
+    // Temperature
     if (group == "GPU Stats" && subgroup == "Temperature") {
       int64_t value = IOReport::SimpleGetIntegerValue(channel, 0);
       if (channel_name == "Average Sum")
@@ -491,7 +513,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
         temp_count = value;
     }
 
-    // --- GPU Energy ---
+    // GPU Energy
     if (group == "Energy Model" &&
         channel_name.find("GPU Energy") != std::string::npos) {
       auto unit =
@@ -508,14 +530,15 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
     }
   }
 
-  // --- Compute power in mW ---
+  // Compute power in mW
   if (elapsedSeconds > 0 && n_joule > 0) {
     statistics.milliwatts =
         static_cast<double>(n_joule) * 1e-6 / elapsedSeconds;
   }
 
-  //? Calculate average temperature
-  //? IOReport temperature values are in centiCelsius (hundredths of a degree)
+  // This no work in my M4 pro
+  // Calculate average temperature
+  // IOReport temperature values are in centiCelsius (hundredths of a degree)
   if (temp_count > 0 && temp_sum > 0) {
     statistics.temp_c = (temp_sum / static_cast<double>(temp_count)) / 100.0;
   }
@@ -529,6 +552,7 @@ bool GPU::Refesh() {
     return false;
   }
   Lookup(ioAccelerator);
+  IOObjectRelease(ioAccelerator);
 
   if (IOReport::LibHandle) {
     CFDictionaryRef currentSample =
@@ -551,12 +575,11 @@ bool GPU::Refesh() {
     }
     prevSampleTime = currentTime;
 
-    //? If IOReport didn't provide temperature, fall back to IOHIDSensors
+    // If IOReport didn't provide temperature, fall back to IOHIDSensors
     if (statistics.temp_c <= 0.0) {
       statistics.temp_c = GetGpuTemperature();
     }
   }
-
   return true;
 }
 
@@ -576,6 +599,9 @@ bool IOGPU::iteratorCallback(io_object_t object, void *data) {
   return true;
 }
 
+// In theory, if you do this on an Intel Mac with a dedicated GPU, it may show
+// the other accelerator, in which case there may be bugs as I haven't tested
+// it.
 IOGPU::IOGPU() {
   IOReport::TryLoad();
   IOServiceGenericIterator("IOAccelerator", iteratorCallback, this);

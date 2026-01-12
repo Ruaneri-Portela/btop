@@ -40,18 +40,14 @@
 
 extern char **environ;
 
-// ----------------------------------------
 // Constructor / Destructor
-// ----------------------------------------
 Powermetrics::Powermetrics() = default;
 
 Powermetrics::~Powermetrics() {
     stop();
 }
 
-// ----------------------------------------
 // Helpers
-// ----------------------------------------
 std::string Powermetrics::trim(std::string s) {
     s.erase(0, s.find_first_not_of(" \t"));
     s.erase(s.find_last_not_of(" \t") + 1);
@@ -84,9 +80,7 @@ bool Powermetrics::available() const {
     return state.find('Z') == std::string::npos;
 }
 
-// ----------------------------------------
 // Start / Stop powermetrics process
-// ----------------------------------------
 bool Powermetrics::start() {
     if (m_pid > 0)
         return true;
@@ -141,9 +135,7 @@ void Powermetrics::stop() {
     m_pid = -1;
 }
 
-// ----------------------------------------
 // Sample data from powermetrics
-// ----------------------------------------
 Powermetrics::Section Powermetrics::sample() {
     if (m_fd < 0)
         return None;
@@ -219,9 +211,7 @@ Powermetrics::Section Powermetrics::sample() {
     return sampled_section;
 }
 
-// ----------------------------------------
 // Sample GPU / CPU
-// ----------------------------------------
 bool Powermetrics::sampleGPU(GpuInfo &out) {
     sample();
     out = gpu;
@@ -242,9 +232,7 @@ bool Powermetrics::sampleCPU(CpuInfo &out) {
     return false;
 }
 
-// ----------------------------------------
 // Parse GPU text data
-// ----------------------------------------
 bool Powermetrics::parse_gpu(const std::string &text, GpuInfo &out) const {
     auto clamp_pct = [](double v) -> uint64_t {
         if (v < 0.0) return 0;
@@ -317,9 +305,7 @@ bool Powermetrics::parse_gpu(const std::string &text, GpuInfo &out) const {
     return true;
 }
 
-// ----------------------------------------
 // Parse CPU text data
-// ----------------------------------------
 bool Powermetrics::parse_cpu(const std::string &text, CpuInfo &out) const {
     auto clamp_pct = [](double v) -> uint64_t {
         if (v < 0.0) return 0;
