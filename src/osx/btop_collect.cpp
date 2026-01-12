@@ -1542,7 +1542,7 @@ namespace Gpu {
 				if constexpr (is_init) {
 					gpus_slice->supported_functions = {
 						.gpu_utilization = true,
-						.mem_utilization = true,
+						.mem_utilization = false,
 						.mem_total = true,
 						.mem_used = true,
 						.pwr_usage = true,

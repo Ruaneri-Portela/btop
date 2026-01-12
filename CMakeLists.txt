@@ -67,7 +67,7 @@ if(BTOP_LTO)
 endif()
 
 if(APPLE)
-  target_sources(libbtop PRIVATE src/osx/btop_collect.cpp src/osx/sensors.cpp src/osx/smc.cpp)
+  target_sources(libbtop PRIVATE src/osx/btop_collect.cpp src/osx/sensors.cpp src/osx/smc.cpp src/osx/iokit.cpp src/osx/powermetrics.cpp src/osx/gpu.cpp)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR CMAKE_SYSTEM_NAME STREQUAL "MidnightBSD")
   target_sources(libbtop PRIVATE src/freebsd/btop_collect.cpp)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
@@ -193,6 +193,10 @@ if(LINUX AND BTOP_GPU)
   endif()
 endif()
 
+if(APPLE AND BTOP_GPU)
+target_compile_definitions(libbtop PUBLIC GPU_SUPPORT)
+endif()
+
 if(BTOP_STATIC)
   target_compile_definitions(libbtop PUBLIC STATIC_BUILD)
   target_link_options(libbtop PUBLIC -static LINKER:--fatal-warnings)
@@ -200,15 +204,6 @@ endif()
 
 # Other platform dependent flags
 if(APPLE)
-  if(BTOP_GPU)
-    target_compile_definitions(libbtop PUBLIC GPU_SUPPORT)
-    target_sources(libbtop PRIVATE
-      src/osx/powermetrics.cpp
-      src/osx/iokit.cpp
-      src/osx/gpu.cpp
-    )
-  endif()
-  
   target_link_libraries(libbtop
     $<LINK_LIBRARY:FRAMEWORK,CoreFoundation> $<LINK_LIBRARY:FRAMEWORK,IOKit>
   )
