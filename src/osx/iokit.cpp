@@ -139,7 +139,8 @@ std::optional<bool> SafeCFBooleanToBool(CFBooleanRef boolRef) {
   if (!boolRef)
     return std::nullopt;
 
-  return CFBooleanGetValue(boolRef);;
+  return CFBooleanGetValue(boolRef);
+  ;
 }
 
 std::optional<std::string>
@@ -181,9 +182,8 @@ SafeIOServiceGetDataVectorFromDictionary(CFDictionaryRef dictionary,
   return SafeCFDataToRawVector(static_cast<CFDataRef>(value));
 }
 
-std::optional<bool>
-SafeIOServiceBoolFromDictionary(CFDictionaryRef dictionary,
-                                         CFStringRef key) {
+std::optional<bool> SafeIOServiceBoolFromDictionary(CFDictionaryRef dictionary,
+                                                    CFStringRef key) {
   if (!dictionary || !key)
     return std::nullopt;
 
@@ -253,4 +253,27 @@ bool IOServiceGenericChildrenIterator(io_object_t parent, const io_name_t plane,
 
   IOObjectRelease(iterator);
   return true;
+}
+
+extern "C" {
+// create a dict ref, like for temperature sensor {"PrimaryUsagePage":0xff00,
+// "PrimaryUsage":0x5}
+CFDictionaryRef CreateHidMatching(int page, int usage) {
+  CFNumberRef nums[2];
+  CFStringRef keys[2];
+
+  keys[0] = CFStringCreateWithCString(0, "PrimaryUsagePage", 0);
+  keys[1] = CFStringCreateWithCString(0, "PrimaryUsage", 0);
+  nums[0] = CFNumberCreate(0, kCFNumberSInt32Type, &page);
+  nums[1] = CFNumberCreate(0, kCFNumberSInt32Type, &usage);
+
+  CFDictionaryRef dict = CFDictionaryCreate(
+      0, (const void **)keys, (const void **)nums, 2,
+      &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+  CFRelease(keys[0]);
+  CFRelease(keys[1]);
+  CFRelease(nums[0]);
+  CFRelease(nums[1]);
+  return dict;
+}
 }

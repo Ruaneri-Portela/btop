@@ -20,7 +20,9 @@
 #include <IOKit/IOTypes.h>
 #include <cstdint>
 #include <string>
+#include <sys/_types/_pid_t.h>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
 class GPUActivities {
@@ -36,7 +38,6 @@ public:
   std::string name;
   int64_t comand_queue_count;
   int64_t comand_queue_count_max;
-
   GPUActivities(io_object_t io_accelerator_children);
 
 private:
@@ -75,13 +76,22 @@ private:
   std::string io_path;
 
   PerformanceStatistics statistics;
-  std::vector<GPUActivities> activities;
+
+  uint64_t prevGpuSecondsElapsed = 0;
+  uint64_t actualGpuInternalTime = 0;
+  uint64_t lastGpuInternalTime = 0;
+  std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>>
+      last_activities;
+  std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>>
+      actual_activities;
+
   int64_t core_count;
 
   std::vector<std::tuple<uint32_t, uint32_t>> gpu_table;
   uint32_t max_freq = 0;
   uint32_t mav_voltage = 0;
 
+  void LookupProcessPercentage();
   void Lookup(io_object_t ioAccelerator);
   void mapKeyToPerformanceStatistics(const std::string &key, int64_t value);
   void ParserChannels(CFDictionaryRef delta, double elapsed_seconds);
@@ -90,15 +100,16 @@ private:
 
   static bool appleArmIoDeviceIteratorCallback(io_object_t object, void *data);
 
+  uint64_t prevSampleTime = 0;
   CFTypeRef subscription = nullptr;
   CFMutableDictionaryRef channels = nullptr;
   CFDictionaryRef prevSample = nullptr;
-  uint64_t prevSampleTime = 0;
 
 public:
   GPU(io_object_t io_accelerator);
 
-  const std::vector<GPUActivities> &getActivities() const;
+  const std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> &
+  getActivities() const;
   const PerformanceStatistics &getStatistics() const;
   const std::string &getName() const;
   const int64_t &getCoreCount() const;

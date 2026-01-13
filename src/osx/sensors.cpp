@@ -29,24 +29,6 @@ tab-size = 4
 #include <vector>
 
 extern "C" {
-// create a dict ref, like for temperature sensor {"PrimaryUsagePage":0xff00, "PrimaryUsage":0x5}
-CFDictionaryRef CreateHidMatching(int page, int usage) {
-	CFNumberRef nums[2];
-	CFStringRef keys[2];
-
-	keys[0] = CFStringCreateWithCString(0, "PrimaryUsagePage", 0);
-	keys[1] = CFStringCreateWithCString(0, "PrimaryUsage", 0);
-	nums[0] = CFNumberCreate(0, kCFNumberSInt32Type, &page);
-	nums[1] = CFNumberCreate(0, kCFNumberSInt32Type, &usage);
-
-	CFDictionaryRef dict = CFDictionaryCreate(0, (const void **)keys, (const void **)nums, 2, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-	CFRelease(keys[0]);
-	CFRelease(keys[1]);
-	CFRelease(nums[0]);
-	CFRelease(nums[1]);
-	return dict;
-}
-
 double getValue(IOHIDServiceClientRef sc) {
 	IOHIDEventRef event = IOHIDServiceClientCopyEvent(sc, kIOHIDEventTypeTemperature, 0, 0);  // here we use ...CopyEvent
 	IOHIDFloat temp = 0.0;

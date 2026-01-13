@@ -19,8 +19,12 @@
 #include "gpu.hpp"
 #include "iokit.hpp"
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
 #include <mach/mach_time.h>
+#include <tuple>
 #include <unordered_map>
+#include <utility>
 
 // Others
 static uint64_t getTimeNs() {
@@ -219,7 +223,23 @@ void GPU::mapKeyToPerformanceStatistics(const std::string &key, int64_t value) {
 
 bool GPU::childrenIteratorCallback(io_object_t object, void *data) {
   auto *self = static_cast<GPU *>(data);
-  self->activities.emplace_back(object);
+
+  GPUActivities newActivity(object);
+
+  if (newActivity.usage.size() == 0)
+    return true;
+
+  uint64_t totalUsage = 0;
+
+  for (const auto &u : newActivity.usage) {
+    totalUsage += u.accumulated_gpu_time;
+  }
+
+  self->actualGpuInternalTime += totalUsage;
+
+  self->actual_activities.insert_or_assign(
+      newActivity.proc, std::make_tuple(std::move(newActivity), totalUsage, 0));
+
   return true;
 }
 
@@ -281,6 +301,43 @@ bool GPU::appleArmIoDeviceIteratorCallback(io_object_t device, void *data) {
   return false;
 }
 
+void GPU::LookupProcessPercentage() {
+  int64_t deltaGpuInternalTime = actualGpuInternalTime - lastGpuInternalTime;
+
+  uint64_t actualGpuSecondsElapsed = getTimeNs();
+  prevGpuSecondsElapsed = actualGpuSecondsElapsed;
+
+  if (!last_activities.empty() && deltaGpuInternalTime > 0) {
+    double denom = static_cast<double>(deltaGpuInternalTime);
+    double maxUtil = static_cast<double>(statistics.device_utilization);
+
+    for (auto &[pid, currTuple] : actual_activities) {
+
+      auto &activity = std::get<0>(currTuple);
+      if (activity.name == "java")
+        puts("");
+      auto &totalTime = std::get<1>(currTuple);
+      auto &targetPercentage = std::get<2>(currTuple);
+
+      auto it = last_activities.find(pid);
+      if (it == last_activities.end())
+        continue;
+
+      auto &totalTimePrev = std::get<1>(it->second);
+
+      uint64_t deltaGpuTime =
+          (totalTime >= totalTimePrev) ? (totalTime - totalTimePrev) : 0;
+
+      if (deltaGpuTime == 0)
+        continue;
+
+      double relative = static_cast<double>(deltaGpuTime) / denom;
+
+      targetPercentage = std::clamp(relative * maxUtil, 0.0, maxUtil);
+    }
+  }
+}
+
 void GPU::Lookup(io_object_t ioAccelerator) {
   CFDictionaryRef perfStats =
       static_cast<CFDictionaryRef>(IORegistryEntryCreateCFProperty(
@@ -308,7 +365,16 @@ void GPU::Lookup(io_object_t ioAccelerator) {
     CFRelease(perfStats);
   }
 
-  activities.clear();
+  last_activities.clear();
+
+  lastGpuInternalTime = actualGpuInternalTime;
+  actualGpuInternalTime = 0;
+  if (actual_activities.size() > 0) {
+    last_activities = std::move(actual_activities);
+  }
+
+  actual_activities.clear();
+
   IOServiceGenericChildrenIterator(ioAccelerator, kIOServicePlane,
                                    childrenIteratorCallback, this);
 }
@@ -399,6 +465,8 @@ GPU::GPU(io_object_t ioAccelerator) {
   prevSample = IOReport::CreateSamples(subscription, channels, nullptr);
   CFRelease(sub_channels);
   prevSampleTime = getTimeNs();
+
+  LookupProcessPercentage();
   return;
 }
 
@@ -580,6 +648,8 @@ bool GPU::Refesh() {
       statistics.temp_c = GetGpuTemperature();
     }
   }
+
+  LookupProcessPercentage();
   return true;
 }
 
@@ -607,8 +677,9 @@ IOGPU::IOGPU() {
   IOServiceGenericIterator("IOAccelerator", iteratorCallback, this);
 }
 
-const std::vector<GPUActivities> &GPU::getActivities() const {
-  return activities;
+const std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> &
+GPU::getActivities() const {
+  return actual_activities;
 }
 
 const GPU::PerformanceStatistics &GPU::getStatistics() const {
