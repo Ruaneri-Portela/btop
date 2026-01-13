@@ -55,6 +55,7 @@ tab-size = 4
 #include <ranges>
 #include <string>
 #include <unordered_set>
+#include <cstring>
 
 #include <fmt/format.h>
 
@@ -124,14 +125,17 @@ namespace Mem {
 	};
 
 namespace Gpu {
-    // List of all GPU information
+    //? List of all GPU information
     std::vector<gpu_info> gpus;
 #ifdef GPU_SUPPORT
     namespace Agx {
         bool initialized = false;
+
         size_t device_count = 0;
-        IOGPU io_gpu;
-        bool init();
+        //? IO_GPU contains the actual vector with the list of GPUs and their data to perform the query.
+		IOGPU io_gpu;
+        
+		bool init();
         bool shutdown();
         template <bool is_init>
         bool collect(gpu_info* gpus_slice, size_t i = 0);
@@ -1473,11 +1477,8 @@ namespace Tools {
 namespace Gpu {
 
 #ifdef GPU_SUPPORT
-    // ----------------------------------------
-    // Apple Silicon specific GPU handling
-    // ----------------------------------------
     namespace Agx {
-        // Initialize Apple Silicon GPU monitoring
+        //? Initialize Apple Silicon GPU monitoring Although the chips always have 1 GPU, I assume we can reuse them later on Intel Macs.
         bool init() {
             const size_t index = gpus.size();
             auto & io_gpus = io_gpu.getGPUs();
@@ -1496,13 +1497,13 @@ namespace Gpu {
             return true;
         }
 
-        // Shutdown Apple Silicon GPU monitoring
+        //? Shutdown Apple Silicon GPU monitoring
         bool shutdown() {
             initialized = false;
             return true;
         }
 
-        // Collect GPU metrics into the provided slice
+        //? Collect GPU metrics into the provided slice
         template <bool is_init>
         bool collect(gpu_info* gpus_slice, size_t index) {
 			if (!initialized) 
@@ -1512,20 +1513,18 @@ namespace Gpu {
 					gpus_slice->supported_functions = {
 						.gpu_utilization = true,
 						.mem_utilization = false,
-						.mem_total = true,
-						.mem_used = true,
-
-						.pwr_usage = IOReport::LibHandle ? true : false,
 						.gpu_clock = IOReport::LibHandle ? true : false,
-						.temp_info = false, //IOReport::LibHandle ? true : false,
-
 						.mem_clock = false,
+						.pwr_usage = IOReport::LibHandle ? true : false,
 						.pwr_state = false,
+						.temp_info = false, // IOReport::LibHandle ? true : false
+						.mem_total = true,
+						.mem_used  = true,
 						.pcie_txrx = false,
 						.encoder_utilization = false,
-						.decoder_utilization = false
+						.decoder_utilization = false						
 					};
-					gpus_slice->pwr_max_usage = 30'000;
+					gpus_slice->pwr_max_usage = 30'000; //? 30w
 				}
 
 				auto& io_gpus = io_gpu.getGPUs();
@@ -1561,10 +1560,8 @@ namespace Gpu {
 
     } // namespace Agx
 
-    // ----------------------------------------
-    // Collect GPU metrics (top-level function)
-    // ----------------------------------------
-	// Full based on linux (intel/amd) gpu collect
+
+	//? Full based (copyed) on linux (intel/amd) gpu collect
     auto collect(bool no_update) -> std::vector<gpu_info>& {
         if (Runner::stopping || (no_update && !gpus.empty()))
             return gpus;

@@ -4,7 +4,7 @@
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
 
-       http://www.apache.org/licenses/LICENSE-2.0
+           http://www.apache.org/licenses/LICENSE-2.0
 
    Unless required by applicable law or agreed to in writing, software
    distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,11 +18,11 @@
 
 #include "iokit.hpp"
 #include <cstdint>
+#include <cstring>  
 #include <dlfcn.h>
 #include <string>
 
-// IOReport non public objects
-
+//? IOReport non public objects
 namespace IOReport {
 void *LibHandle = nullptr;
 bool TryLoaded = false;
@@ -54,228 +54,264 @@ int64_t (*StateGetResidency)(CFDictionaryRef, int32_t) = nullptr;
 int64_t (*SimpleGetIntegerValue)(CFDictionaryRef, int32_t) = nullptr;
 
 void TryLoad() {
-  if (!TryLoaded)
-    TryLoaded = true;
+    if (!TryLoaded)
+        TryLoaded = true;
 
-  LibHandle = dlopen("/usr/lib/libIOReport.dylib", RTLD_NOW);
-  if (LibHandle == nullptr) {
-    return;
-  }
+    //? This file does not actually exist if searched for in the Mac OS path,
+    //however its functions are in the Mac OS libs cache.
+    LibHandle = dlopen("/usr/lib/libIOReport.dylib", RTLD_NOW);
+    if (LibHandle == nullptr) {
+        return;
+    }
 
 //? Load all required functions
 #define LOAD_FUNC(sym)                                                         \
-  sym = reinterpret_cast<decltype(IOReport::sym)>(                             \
-      dlsym(LibHandle, "IOReport" #sym));                                      \
-  if (!sym) {                                                                  \
-    dlclose(LibHandle);                                                        \
-    LibHandle = nullptr;                                                       \
-    return;                                                                    \
-  }
+    sym = reinterpret_cast<decltype(IOReport::sym)>(                           \
+        dlsym(LibHandle, "IOReport" #sym));                                    \
+    if (!sym) {                                                                \
+        dlclose(LibHandle);                                                    \
+        LibHandle = nullptr;                                                   \
+        return;                                                                \
+    }
 
-  LOAD_FUNC(CopyChannelsInGroup)
-  LOAD_FUNC(MergeChannels)
-  LOAD_FUNC(CreateSubscription)
-  LOAD_FUNC(CreateSamples)
-  LOAD_FUNC(CreateSamplesDelta)
-  LOAD_FUNC(ChannelGetGroup)
-  LOAD_FUNC(ChannelGetSubGroup)
-  LOAD_FUNC(ChannelGetChannelName)
-  LOAD_FUNC(ChannelGetUnitLabel)
-  LOAD_FUNC(StateGetCount)
-  LOAD_FUNC(StateGetNameForIndex)
-  LOAD_FUNC(StateGetResidency)
-  LOAD_FUNC(SimpleGetIntegerValue)
-  LOAD_FUNC(ChannelGetDriverName)
+    LOAD_FUNC(CopyChannelsInGroup)
+    LOAD_FUNC(MergeChannels)
+    LOAD_FUNC(CreateSubscription)
+    LOAD_FUNC(CreateSamples)
+    LOAD_FUNC(CreateSamplesDelta)
+    LOAD_FUNC(ChannelGetGroup)
+    LOAD_FUNC(ChannelGetSubGroup)
+    LOAD_FUNC(ChannelGetChannelName)
+    LOAD_FUNC(ChannelGetUnitLabel)
+    LOAD_FUNC(StateGetCount)
+    LOAD_FUNC(StateGetNameForIndex)
+    LOAD_FUNC(StateGetResidency)
+    LOAD_FUNC(SimpleGetIntegerValue)
+    LOAD_FUNC(ChannelGetDriverName)
 
 #undef LOAD_FUNC
 }
 } // namespace IOReport
 
-// Helpers IOKit -> CPP
+//? Tools for converting CF to std
+//? Below, the items process CF objects for their std equivalents. Here, the
+//type is not verified, so make sure it is of the type called
 
 std::optional<std::string> SafeCFStringToStdString(CFStringRef strRef) {
-  if (!strRef)
-    return std::nullopt;
+    if (!strRef)
+        return std::nullopt;
 
-  CFIndex maxSize = CFStringGetMaximumSizeForEncoding(CFStringGetLength(strRef),
-                                                      kCFStringEncodingUTF8) +
-                    1;
+    CFIndex maxSize = CFStringGetMaximumSizeForEncoding(
+                          CFStringGetLength(strRef), kCFStringEncodingUTF8) +
+                      1;
 
-  std::string result(maxSize, '\0');
+    std::string result(maxSize, '\0');
 
-  if (!CFStringGetCString(strRef, result.data(), maxSize,
-                          kCFStringEncodingUTF8))
-    return std::nullopt;
+    if (!CFStringGetCString(strRef, result.data(), maxSize,
+                            kCFStringEncodingUTF8))
+        return std::nullopt;
 
-  result.resize(std::strlen(result.c_str()));
-  return result;
+    result.resize(std::strlen(result.c_str()));
+    return result;
 }
 
 std::optional<int64_t> SafeCFNumberToInt64(CFNumberRef numberRef) {
-  if (!numberRef)
-    return std::nullopt;
+    if (!numberRef)
+        return std::nullopt;
 
-  int64_t value = 0;
-  if (!CFNumberGetValue(numberRef, kCFNumberSInt64Type, &value))
-    return std::nullopt;
+    int64_t value = 0;
+    if (!CFNumberGetValue(numberRef, kCFNumberSInt64Type, &value))
+        return std::nullopt;
 
-  return value;
+    return value;
 }
 
 std::optional<std::vector<uint8_t>> SafeCFDataToRawVector(CFDataRef dataRef) {
-  if (!dataRef)
-    return std::nullopt;
+    if (!dataRef)
+        return std::nullopt;
 
-  CFIndex length = CFDataGetLength(dataRef);
-  if (length <= 0)
-    return std::nullopt;
+    CFIndex length = CFDataGetLength(dataRef);
+    if (length <= 0)
+        return std::nullopt;
 
-  std::vector<uint8_t> buffer(static_cast<size_t>(length));
+    std::vector<uint8_t> buffer(static_cast<size_t>(length));
 
-  CFDataGetBytes(dataRef, CFRangeMake(0, length), buffer.data());
+    CFDataGetBytes(dataRef, CFRangeMake(0, length), buffer.data());
 
-  return buffer;
+    return buffer;
 }
 
 std::optional<bool> SafeCFBooleanToBool(CFBooleanRef boolRef) {
-  if (!boolRef)
-    return std::nullopt;
+    if (!boolRef)
+        return std::nullopt;
 
-  return CFBooleanGetValue(boolRef);
-  ;
+    return CFBooleanGetValue(boolRef);
+    ;
 }
+
+/*
+Below are functions that help with dictionary searches. They return compatible
+types in std if everything goes well. If not, they return nullpot if:
+
+The dictionary is invalid.
+The entry does not exist.
+It is not a compatible type.
+
+It can be used as a quick test of the dictionary type.
+*/
 
 std::optional<std::string>
 SafeIOServiceGetStringFromDictionary(CFDictionaryRef dictionary,
                                      CFStringRef key) {
-  if (!dictionary || !key)
-    return std::nullopt;
+    if (!dictionary || !key)
+        return std::nullopt;
 
-  CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-  if (!value || CFGetTypeID(value) != CFStringGetTypeID())
-    return std::nullopt;
+    CFTypeRef value = CFDictionaryGetValue(dictionary, key);
+    if (!value || CFGetTypeID(value) != CFStringGetTypeID())
+        return std::nullopt;
 
-  return SafeCFStringToStdString(static_cast<CFStringRef>(value));
+    return SafeCFStringToStdString(static_cast<CFStringRef>(value));
 }
 
 std::optional<int64_t>
 SafeIOServiceGetNumberFromDictionary(CFDictionaryRef dictionary,
                                      CFStringRef key) {
-  if (!dictionary || !key)
-    return std::nullopt;
+    if (!dictionary || !key)
+        return std::nullopt;
 
-  CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-  if (!value || CFGetTypeID(value) != CFNumberGetTypeID())
-    return std::nullopt;
+    CFTypeRef value = CFDictionaryGetValue(dictionary, key);
+    if (!value || CFGetTypeID(value) != CFNumberGetTypeID())
+        return std::nullopt;
 
-  return SafeCFNumberToInt64(static_cast<CFNumberRef>(value));
+    return SafeCFNumberToInt64(static_cast<CFNumberRef>(value));
 }
 
 std::optional<std::vector<uint8_t>>
 SafeIOServiceGetDataVectorFromDictionary(CFDictionaryRef dictionary,
                                          CFStringRef key) {
-  if (!dictionary || !key)
-    return std::nullopt;
+    if (!dictionary || !key)
+        return std::nullopt;
 
-  CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-  if (!value || CFGetTypeID(value) != CFDataGetTypeID())
-    return std::nullopt;
+    CFTypeRef value = CFDictionaryGetValue(dictionary, key);
+    if (!value || CFGetTypeID(value) != CFDataGetTypeID())
+        return std::nullopt;
 
-  return SafeCFDataToRawVector(static_cast<CFDataRef>(value));
+    return SafeCFDataToRawVector(static_cast<CFDataRef>(value));
 }
 
 std::optional<bool> SafeIOServiceBoolFromDictionary(CFDictionaryRef dictionary,
                                                     CFStringRef key) {
-  if (!dictionary || !key)
-    return std::nullopt;
+    if (!dictionary || !key)
+        return std::nullopt;
 
-  CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-  if (!value || CFGetTypeID(value) != CFBooleanGetTypeID())
-    return std::nullopt;
+    CFTypeRef value = CFDictionaryGetValue(dictionary, key);
+    if (!value || CFGetTypeID(value) != CFBooleanGetTypeID())
+        return std::nullopt;
 
-  return SafeCFBooleanToBool(static_cast<CFBooleanRef>(value));
+    return SafeCFBooleanToBool(static_cast<CFBooleanRef>(value));
 }
+
+/*
+Helps obtain the parent item of the object in the IOKit tree.
+Returns the entry of the object that now belongs to the caller's management.
+*/
 
 io_registry_entry_t IOServiceGetParent(io_registry_entry_t entry,
                                        const io_name_t plane) {
-  io_iterator_t iterator = IO_OBJECT_NULL;
+    io_iterator_t iterator = IO_OBJECT_NULL;
 
-  if (IORegistryEntryGetParentIterator(entry, plane, &iterator) != KERN_SUCCESS)
-    return IO_OBJECT_NULL;
+    if (IORegistryEntryGetParentIterator(entry, plane, &iterator) !=
+        KERN_SUCCESS)
+        return IO_OBJECT_NULL;
 
-  io_registry_entry_t parent = IOIteratorNext(iterator);
-  IOObjectRelease(iterator);
+    io_registry_entry_t parent = IOIteratorNext(iterator);
+    IOObjectRelease(iterator);
 
-  return parent; // caller must IOObjectRelease
+    return parent; // caller must IOObjectRelease
 }
+
+/*
+Given a class, we look at all the items that belong to it. For example,
+IOAccelerator returns all GPUs. It works by giving a callback with any pointer
+that enters the function. When returning true, it iterates to the next one; when
+returning false, it iterates to the previous one.
+*/
 
 bool IOServiceGenericIterator(const std::string &className,
                               IOServiceCallback callback, void *data) {
-  CFDictionaryRef matching = IOServiceMatching(className.c_str());
-  if (!matching)
-    return false;
+    CFDictionaryRef matching = IOServiceMatching(className.c_str());
+    if (!matching)
+        return false;
 
-  io_iterator_t iterator = IO_OBJECT_NULL;
-  if (IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) !=
-      KERN_SUCCESS)
-    return false;
+    io_iterator_t iterator = IO_OBJECT_NULL;
+    if (IOServiceGetMatchingServices(kIOMainPortDefault, matching, &iterator) !=
+        KERN_SUCCESS)
+        return false;
 
-  io_object_t service;
-  while ((service = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
-    bool result = false;
-    if (callback)
-      result = callback(service, data);
+    io_object_t service;
+    while ((service = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
+        bool result = false;
+        if (callback)
+            result = callback(service, data);
 
-    IOObjectRelease(service);
-    if (!result)
-      break;
-  }
+        IOObjectRelease(service);
+        if (!result)
+            break;
+    }
 
-  IOObjectRelease(iterator);
-  return true;
+    IOObjectRelease(iterator);
+    return true;
 }
+
+/*
+Helps visualize the objects below the item in the IOkit tree.
+Requires a callback and a pointer that will be passed to each item found.
+When returning true, it iterates to the next one; when returning false, it
+iterates to the previous one.
+*/
 
 bool IOServiceGenericChildrenIterator(io_object_t parent, const io_name_t plane,
                                       IOServiceCallback callback, void *data) {
-  io_iterator_t iterator = IO_OBJECT_NULL;
+    io_iterator_t iterator = IO_OBJECT_NULL;
 
-  if (IORegistryEntryGetChildIterator(parent, plane, &iterator) != KERN_SUCCESS)
-    return false;
+    if (IORegistryEntryGetChildIterator(parent, plane, &iterator) !=
+        KERN_SUCCESS)
+        return false;
 
-  io_object_t child;
-  while ((child = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
-    bool result = false;
-    if (callback)
-      result = callback(child, data);
+    io_object_t child;
+    while ((child = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
+        bool result = false;
+        if (callback)
+            result = callback(child, data);
 
-    IOObjectRelease(child);
-    if (!result)
-      break;
-  }
+        IOObjectRelease(child);
+        if (!result)
+            break;
+    }
 
-  IOObjectRelease(iterator);
-  return true;
+    IOObjectRelease(iterator);
+    return true;
 }
 
 extern "C" {
-// create a dict ref, like for temperature sensor {"PrimaryUsagePage":0xff00,
-// "PrimaryUsage":0x5}
+//? create a dict ref, like for temperature sensor {"PrimaryUsagePage":0xff00,
+//"PrimaryUsage":0x5}
 CFDictionaryRef CreateHidMatching(int page, int usage) {
-  CFNumberRef nums[2];
-  CFStringRef keys[2];
+    CFNumberRef nums[2];
+    CFStringRef keys[2];
 
-  keys[0] = CFStringCreateWithCString(0, "PrimaryUsagePage", 0);
-  keys[1] = CFStringCreateWithCString(0, "PrimaryUsage", 0);
-  nums[0] = CFNumberCreate(0, kCFNumberSInt32Type, &page);
-  nums[1] = CFNumberCreate(0, kCFNumberSInt32Type, &usage);
+    keys[0] = CFStringCreateWithCString(0, "PrimaryUsagePage", 0);
+    keys[1] = CFStringCreateWithCString(0, "PrimaryUsage", 0);
+    nums[0] = CFNumberCreate(0, kCFNumberSInt32Type, &page);
+    nums[1] = CFNumberCreate(0, kCFNumberSInt32Type, &usage);
 
-  CFDictionaryRef dict = CFDictionaryCreate(
-      0, (const void **)keys, (const void **)nums, 2,
-      &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-  CFRelease(keys[0]);
-  CFRelease(keys[1]);
-  CFRelease(nums[0]);
-  CFRelease(nums[1]);
-  return dict;
+    CFDictionaryRef dict = CFDictionaryCreate(
+        0, (const void **)keys, (const void **)nums, 2,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFRelease(keys[0]);
+    CFRelease(keys[1]);
+    CFRelease(nums[0]);
+    CFRelease(nums[1]);
+    return dict;
 }
 }
