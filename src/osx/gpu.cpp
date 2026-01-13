@@ -58,7 +58,6 @@ static double GetGpuTemperature() {
           CFRelease(name);
 
           // In M4 CPU show all cores temperatures, but need to parser
-
           if (sensor_name.find("GPU") != std::string::npos) {
             IOHIDEventRef event = IOHIDServiceClientCopyEvent(
                 service, kIOHIDEventTypeTemperature, 0, 0);
@@ -312,10 +311,6 @@ void GPU::LookupProcessPercentage() {
     double maxUtil = static_cast<double>(statistics.device_utilization);
 
     for (auto &[pid, currTuple] : actual_activities) {
-
-      auto &activity = std::get<0>(currTuple);
-      if (activity.name == "java")
-        puts("");
       auto &totalTime = std::get<1>(currTuple);
       auto &targetPercentage = std::get<2>(currTuple);
 
@@ -622,6 +617,7 @@ bool GPU::Refesh() {
   Lookup(ioAccelerator);
   IOObjectRelease(ioAccelerator);
 
+  // IO Report provide Clock, Wattage and Temperature (but the last not work)
   if (IOReport::LibHandle) {
     CFDictionaryRef currentSample =
         IOReport::CreateSamples(subscription, channels, nullptr);

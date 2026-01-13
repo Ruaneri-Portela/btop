@@ -70,8 +70,6 @@ tab-size = 4
 
 #include "iokit.hpp"
 #include "gpu.hpp"
-#include "powermetrics.hpp"
-Powermetrics privilegedInfo;
 
 using std::clamp, std::string_literals::operator""s, std::cmp_equal, std::cmp_less, std::cmp_greater;
 using std::ifstream, std::numeric_limits, std::streamsize, std::round, std::max, std::min;
@@ -129,32 +127,16 @@ namespace Gpu {
     // List of all GPU information
     std::vector<gpu_info> gpus;
 #ifdef GPU_SUPPORT
-    // ----------------------------------------
-    // Apple Silicon specific GPU handling
-    // ----------------------------------------
     namespace Agx {
-
-        // Initialization state
         bool initialized = false;
-
-        // Number of GPU devices
         size_t device_count = 0;
-
-        // IOGPU interface for Apple GPUs
         IOGPU io_gpu;
-
-        // Initializes Apple Silicon GPU monitoring
         bool init();
-
-        // Shuts down Apple Silicon GPU monitoring
         bool shutdown();
-
-        // Collects GPU metrics into the provided slice
         template <bool is_init>
         bool collect(gpu_info* gpus_slice, size_t i = 0);
 
     } // namespace Agx
-    // Collects GPU metrics; optionally skips updating the underlying GPU list
     auto collect(bool no_update) -> std::vector<gpu_info>&;
 #endif // GPU_SUPPORT
 } // namespace Gpu
@@ -166,8 +148,6 @@ namespace Shared {
 	double machTck;
 	int totalMem_len;
 	void init() {
-		privilegedInfo.start();
-
 		//? Shared global variables init		
 		coreCount = sysconf(_SC_NPROCESSORS_ONLN); // this returns all logical cores (threads)
 		if (coreCount < 1) {
@@ -262,9 +242,6 @@ namespace Cpu {
 	string cpuHz;
 	bool has_battery = true;
 	bool macM1 = false;
-
-	Powermetrics::CpuInfo info;
-
 	tuple<int, float, long, string> current_bat;
 
 	const array<string, 10> time_names = {"user", "nice", "system", "idle"};
@@ -372,9 +349,7 @@ namespace Cpu {
 		int mib[] = {CTL_HW, HW_CPU_FREQ};
 
 		if (sysctl(mib, 2, &freq, &size, nullptr, 0) < 0) {
-			if (info.avg_freq_mhz == 0)
-				return "";
-			freq = info.avg_freq_mhz * 1000000;
+			return "";
 		}
 
 		if (freq < 1000000000) {
@@ -500,11 +475,6 @@ namespace Cpu {
 		if (Runner::stopping or (no_update and not current_cpu.cpu_percent.at("total").empty()))
 			return current_cpu;
 		auto &cpu = current_cpu;
-
-		if(privilegedInfo.sampleCPU(info)){
-			supports_watts = true;
-			cpu.usage_watts = static_cast<float>(info.power_mw) / 1000.0f;
-		};
 
 		if (getloadavg(cpu.load_avg.data(), cpu.load_avg.size()) < 0) {
 			Logger::error("failed to get load averages");
@@ -1503,7 +1473,6 @@ namespace Tools {
 namespace Gpu {
 
 #ifdef GPU_SUPPORT
-
     // ----------------------------------------
     // Apple Silicon specific GPU handling
     // ----------------------------------------
@@ -1545,17 +1514,18 @@ namespace Gpu {
 						.mem_utilization = false,
 						.mem_total = true,
 						.mem_used = true,
-						.pwr_usage = true,
-						.gpu_clock = true,
+
+						.pwr_usage = IOReport::LibHandle ? true : false,
+						.gpu_clock = IOReport::LibHandle ? true : false,
+						.temp_info = false, //IOReport::LibHandle ? true : false,
 
 						.mem_clock = false,
 						.pwr_state = false,
-						.temp_info = false,
 						.pcie_txrx = false,
 						.encoder_utilization = false,
 						.decoder_utilization = false
 					};
-					gpus_slice->pwr_max_usage = 3'000'000;
+					gpus_slice->pwr_max_usage = 30'000;
 				}
 
 				auto& io_gpus = io_gpu.getGPUs();
@@ -1566,10 +1536,7 @@ namespace Gpu {
 				auto gpu_data = io_gpus[i].getStatistics();
 
 				gpus_slice->gpu_percent.at("gpu-totals").push_back(gpu_data.device_utilization);
-				gpus_slice->gpu_percent.at("gpu-pwr-totals").push_back(gpu_data.milliwatts);
 
-				gpus_slice->pwr_usage = gpu_data.milliwatts;
-				gpus_slice->gpu_clock_speed = gpu_data.gpu_frequency / 1'000'000;
 				gpus_slice->mem_total = gpu_data.alloc_system_memory;
 				gpus_slice->mem_used  = gpu_data.in_use_system_memory;
 				long long mem_percent = 0;
@@ -1579,6 +1546,14 @@ namespace Gpu {
 					);
 				}
 				gpus_slice->gpu_percent.at("gpu-vram-totals").push_back(mem_percent);
+				//gpus_slice->mem_utilization_percent.push_back(mem_percent);
+
+				if(IOReport::LibHandle){
+					gpus_slice->gpu_percent.at("gpu-pwr-totals").push_back(gpu_data.milliwatts);
+					gpus_slice->pwr_usage = gpu_data.milliwatts;
+					gpus_slice->gpu_clock_speed = gpu_data.gpu_frequency / 1'000'000;
+					//gpus_slice->temp.push_back( gpu_data.temp_c);
+				}
 			}
             
             return true;

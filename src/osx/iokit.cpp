@@ -17,7 +17,9 @@
 */
 
 #include "iokit.hpp"
+#include <cstdint>
 #include <dlfcn.h>
+#include <string>
 
 // IOReport non public objects
 
