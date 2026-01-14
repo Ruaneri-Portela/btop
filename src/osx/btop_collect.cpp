@@ -128,7 +128,7 @@ namespace Gpu {
     //? List of all GPU information
     std::vector<gpu_info> gpus;
 #ifdef GPU_SUPPORT
-    namespace Agx {
+    namespace IOAccelerator {
         bool initialized = false;
 
         size_t device_count = 0;
@@ -140,7 +140,7 @@ namespace Gpu {
         template <bool is_init>
         bool collect(gpu_info* gpus_slice, size_t i = 0);
 
-    } // namespace Agx
+    } // namespace IOAccelerator
     auto collect(bool no_update) -> std::vector<gpu_info>&;
 #endif // GPU_SUPPORT
 } // namespace Gpu
@@ -215,7 +215,7 @@ namespace Shared {
 		auto shown_gpus = Config::getS("shown_gpus");
 
 		if (shown_gpus.contains("apple")) {
-			Gpu::Agx::init();
+			Gpu::IOAccelerator::init();
 		}
 
 
@@ -1477,7 +1477,7 @@ namespace Tools {
 namespace Gpu {
 
 #ifdef GPU_SUPPORT
-    namespace Agx {
+    namespace IOAccelerator {
         //? Initialize Apple Silicon GPU monitoring Although the chips always have 1 GPU, I assume we can reuse them later on Intel Macs.
         bool init() {
             const size_t index = gpus.size();
@@ -1491,7 +1491,10 @@ namespace Gpu {
 
 			for(size_t i = 0; i < io_gpus.size() ; i++){
 				gpus.emplace_back();  
-            	gpu_names.emplace_back(std::string(io_gpus[0].getName()));
+				std::string name = fmt::format("{} ({})",
+                               io_gpus[i].getName(),
+                               io_gpus[i].getCoreCount());
+            	gpu_names.emplace_back(name);
 				collect<true>(&gpus[index], i);
 			}
             return true;
@@ -1506,8 +1509,9 @@ namespace Gpu {
         //? Collect GPU metrics into the provided slice
         template <bool is_init>
         bool collect(gpu_info* gpus_slice, size_t index) {
-			if (!initialized) 
+			if (not initialized) 
 				return false;
+
 			for(size_t i = 0; i <= index ; i++){
 				if constexpr (is_init) {
 					gpus_slice->supported_functions = {
@@ -1558,7 +1562,7 @@ namespace Gpu {
             return true;
         }
 
-    } // namespace Agx
+    } // namespace IOAccelerator
 
 
 	//? Full based (copyed) on linux (intel/amd) gpu collect
@@ -1566,7 +1570,7 @@ namespace Gpu {
         if (Runner::stopping || (no_update && !gpus.empty()))
             return gpus;
 
-        Agx::collect<false>(gpus.data());
+        IOAccelerator::collect<false>(gpus.data());
 
         //* Calculate average metrics
         long long avg = 0;

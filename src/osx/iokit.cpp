@@ -54,7 +54,7 @@ int64_t (*StateGetResidency)(CFDictionaryRef, int32_t) = nullptr;
 int64_t (*SimpleGetIntegerValue)(CFDictionaryRef, int32_t) = nullptr;
 
 void TryLoad() {
-    if (!TryLoaded)
+    if (not TryLoaded)
         TryLoaded = true;
 
     //? This file does not actually exist if searched for in the Mac OS path,
@@ -68,7 +68,7 @@ void TryLoad() {
 #define LOAD_FUNC(sym)                                                         \
     sym = reinterpret_cast<decltype(IOReport::sym)>(                           \
         dlsym(LibHandle, "IOReport" #sym));                                    \
-    if (!sym) {                                                                \
+    if (not sym) {                                                             \
         dlclose(LibHandle);                                                    \
         LibHandle = nullptr;                                                   \
         return;                                                                \
@@ -98,7 +98,7 @@ void TryLoad() {
 //type is not verified, so make sure it is of the type called
 
 std::optional<std::string> SafeCFStringToStdString(CFStringRef strRef) {
-    if (!strRef)
+    if (not strRef)
         return std::nullopt;
 
     CFIndex maxSize = CFStringGetMaximumSizeForEncoding(
@@ -107,7 +107,7 @@ std::optional<std::string> SafeCFStringToStdString(CFStringRef strRef) {
 
     std::string result(maxSize, '\0');
 
-    if (!CFStringGetCString(strRef, result.data(), maxSize,
+    if (not CFStringGetCString(strRef, result.data(), maxSize,
                             kCFStringEncodingUTF8))
         return std::nullopt;
 
@@ -116,18 +116,18 @@ std::optional<std::string> SafeCFStringToStdString(CFStringRef strRef) {
 }
 
 std::optional<int64_t> SafeCFNumberToInt64(CFNumberRef numberRef) {
-    if (!numberRef)
+    if (not numberRef)
         return std::nullopt;
 
     int64_t value = 0;
-    if (!CFNumberGetValue(numberRef, kCFNumberSInt64Type, &value))
+    if (not CFNumberGetValue(numberRef, kCFNumberSInt64Type, &value))
         return std::nullopt;
 
     return value;
 }
 
 std::optional<std::vector<uint8_t>> SafeCFDataToRawVector(CFDataRef dataRef) {
-    if (!dataRef)
+    if (not dataRef)
         return std::nullopt;
 
     CFIndex length = CFDataGetLength(dataRef);
@@ -142,11 +142,10 @@ std::optional<std::vector<uint8_t>> SafeCFDataToRawVector(CFDataRef dataRef) {
 }
 
 std::optional<bool> SafeCFBooleanToBool(CFBooleanRef boolRef) {
-    if (!boolRef)
+    if (not boolRef)
         return std::nullopt;
 
     return CFBooleanGetValue(boolRef);
-    ;
 }
 
 /*
@@ -163,11 +162,11 @@ It can be used as a quick test of the dictionary type.
 std::optional<std::string>
 SafeIOServiceGetStringFromDictionary(CFDictionaryRef dictionary,
                                      CFStringRef key) {
-    if (!dictionary || !key)
+    if (not dictionary or not key)
         return std::nullopt;
 
     CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-    if (!value || CFGetTypeID(value) != CFStringGetTypeID())
+    if (not value or CFGetTypeID(value) != CFStringGetTypeID())
         return std::nullopt;
 
     return SafeCFStringToStdString(static_cast<CFStringRef>(value));
@@ -176,11 +175,11 @@ SafeIOServiceGetStringFromDictionary(CFDictionaryRef dictionary,
 std::optional<int64_t>
 SafeIOServiceGetNumberFromDictionary(CFDictionaryRef dictionary,
                                      CFStringRef key) {
-    if (!dictionary || !key)
+    if (not dictionary or not key)
         return std::nullopt;
 
     CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-    if (!value || CFGetTypeID(value) != CFNumberGetTypeID())
+    if (not value or CFGetTypeID(value) != CFNumberGetTypeID())
         return std::nullopt;
 
     return SafeCFNumberToInt64(static_cast<CFNumberRef>(value));
@@ -189,11 +188,11 @@ SafeIOServiceGetNumberFromDictionary(CFDictionaryRef dictionary,
 std::optional<std::vector<uint8_t>>
 SafeIOServiceGetDataVectorFromDictionary(CFDictionaryRef dictionary,
                                          CFStringRef key) {
-    if (!dictionary || !key)
+    if (not dictionary or not key)
         return std::nullopt;
 
     CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-    if (!value || CFGetTypeID(value) != CFDataGetTypeID())
+    if (not value or CFGetTypeID(value) != CFDataGetTypeID())
         return std::nullopt;
 
     return SafeCFDataToRawVector(static_cast<CFDataRef>(value));
@@ -201,11 +200,11 @@ SafeIOServiceGetDataVectorFromDictionary(CFDictionaryRef dictionary,
 
 std::optional<bool> SafeIOServiceBoolFromDictionary(CFDictionaryRef dictionary,
                                                     CFStringRef key) {
-    if (!dictionary || !key)
+    if (not dictionary or  not key)
         return std::nullopt;
 
     CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-    if (!value || CFGetTypeID(value) != CFBooleanGetTypeID())
+    if (!value or CFGetTypeID(value) != CFBooleanGetTypeID())
         return std::nullopt;
 
     return SafeCFBooleanToBool(static_cast<CFBooleanRef>(value));
@@ -240,7 +239,7 @@ returning false, it iterates to the previous one.
 bool IOServiceGenericIterator(const std::string &className,
                               IOServiceCallback callback, void *data) {
     CFDictionaryRef matching = IOServiceMatching(className.c_str());
-    if (!matching)
+    if (not matching)
         return false;
 
     io_iterator_t iterator = IO_OBJECT_NULL;
@@ -255,7 +254,7 @@ bool IOServiceGenericIterator(const std::string &className,
             result = callback(service, data);
 
         IOObjectRelease(service);
-        if (!result)
+        if (not result)
             break;
     }
 
@@ -285,7 +284,7 @@ bool IOServiceGenericChildrenIterator(io_object_t parent, const io_name_t plane,
             result = callback(child, data);
 
         IOObjectRelease(child);
-        if (!result)
+        if (not result)
             break;
     }
 

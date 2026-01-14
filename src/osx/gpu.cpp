@@ -68,7 +68,7 @@ static double GetGpuTemperature() {
                             double temp = IOHIDEventGetFloatValue(
                                 event, IOHIDEventFieldBase(
                                            kIOHIDEventTypeTemperature));
-                            if (temp > 0 && temp < 150) { //? Sanity check
+                            if (temp > 0 and temp < 150) { //? Sanity check
                                 gpu_temp += temp;
                             }
                             CFRelease(event);
@@ -119,7 +119,7 @@ GPUActivities::GPUActivities(io_object_t entry) {
     CFTypeRef creatorRef = IORegistryEntryCreateCFProperty(
         entry, CFSTR("IOUserClientCreator"), kCFAllocatorDefault, 0);
 
-    if (!creatorRef)
+    if (not creatorRef)
         return;
 
     auto creator =
@@ -127,7 +127,7 @@ GPUActivities::GPUActivities(io_object_t entry) {
 
     CFRelease(creatorRef);
 
-    if (!creator)
+    if (not creator)
         return;
 
     const std::string &s = *creator;
@@ -135,7 +135,7 @@ GPUActivities::GPUActivities(io_object_t entry) {
     const auto pidPos = s.find("pid ");
     const auto commaPos = s.find(',');
 
-    if (pidPos == std::string::npos || commaPos == std::string::npos)
+    if (pidPos == std::string::npos or commaPos == std::string::npos)
         return;
 
     try {
@@ -148,7 +148,7 @@ GPUActivities::GPUActivities(io_object_t entry) {
     CFTypeRef appUsageRef = IORegistryEntryCreateCFProperty(
         entry, CFSTR("AppUsage"), kCFAllocatorDefault, 0);
 
-    if (!appUsageRef)
+    if (not appUsageRef)
         return;
 
     if (CFGetTypeID(appUsageRef) != CFArrayGetTypeID()) {
@@ -162,7 +162,7 @@ GPUActivities::GPUActivities(io_object_t entry) {
     for (CFIndex i = 0; i < count; ++i) {
         CFTypeRef item = CFArrayGetValueAtIndex(appUsageArray, i);
 
-        if (!item || CFGetTypeID(item) != CFDictionaryGetTypeID())
+        if (!item or CFGetTypeID(item) != CFDictionaryGetTypeID())
             continue;
 
         CFDictionaryRef usageStats = static_cast<CFDictionaryRef>(item);
@@ -262,7 +262,7 @@ bool GPU::childrenIteratorCallback(io_object_t object, void *data) {
 bool GPU::appleArmIoDeviceIteratorCallback(io_object_t device, void *data) {
     auto *self = static_cast<GPU *>(data);
 
-    io_name_t name{};
+    io_name_t name;
     IORegistryEntryGetName(device, name);
 
     if (std::strcmp(name, "pmgr") != 0)
@@ -280,7 +280,7 @@ bool GPU::appleArmIoDeviceIteratorCallback(io_object_t device, void *data) {
         const auto &bytes = *buffer;
         const CFIndex length = bytes.size();
 
-        if (length >= 8 && (length % 8) == 0) {
+        if (length >= 8 and (length % 8) == 0) {
             self->gpu_table.clear();
             uint32_t max_freq = 0;
             uint32_t max_voltage = 0;
@@ -326,7 +326,7 @@ void GPU::LookupProcessPercentage() {
     uint64_t actualGpuSecondsElapsed = getTimeNs();
     prevGpuSecondsElapsed = actualGpuSecondsElapsed;
 
-    if (!last_activities.empty() && deltaGpuInternalTime > 0) {
+    if (!last_activities.empty() and deltaGpuInternalTime > 0) {
         double denom = static_cast<double>(deltaGpuInternalTime);
         double maxUtil = static_cast<double>(statistics.device_utilization);
 
@@ -518,7 +518,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
         CFDictionaryRef channel =
             (CFDictionaryRef)CFArrayGetValueAtIndex(channel_array, i);
 
-        if (!channel || CFGetTypeID(channel) != CFDictionaryGetTypeID())
+        if (!channel or CFGetTypeID(channel) != CFDictionaryGetTypeID())
             continue;
 
         //? It's possible to check the driver name to see if it matches the
@@ -542,7 +542,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
                 .value_or("");
 
         //? GPU Performance States
-        if (group == "GPU Stats" && subgroup == "GPU Performance States" &&
+        if (group == "GPU Stats" and subgroup == "GPU Performance States" and
             channel_name == "GPUPH") {
 
             int32_t state_count = IOReport::StateGetCount(channel);
@@ -561,17 +561,17 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
                 int64_t residency_ns = IOReport::StateGetResidency(channel, s);
                 total_time += residency_ns;
 
-                if (state_name.empty() || state_name == "OFF" ||
+                if (state_name.empty() or state_name == "OFF" or
                     state_name == "IDLE")
                     continue;
 
                 int64_t freq = 0, volt = 0;
                 //? Based on that saved table, we can identify which clock speed
                 //and voltage were currently being used.
-                if (state_name[0] == 'P' && state_name.length() > 1) {
+                if (state_name[0] == 'P' and state_name.length() > 1) {
                     try {
                         int pstate_idx = std::stoi(state_name.substr(1)) - 1;
-                        if (pstate_idx >= 0 && static_cast<size_t>(pstate_idx) <
+                        if (pstate_idx >= 0 and static_cast<size_t>(pstate_idx) <
                                                    gpu_table.size()) {
                             freq = std::get<0>(gpu_table[pstate_idx]);
                             volt = std::get<1>(gpu_table[pstate_idx]);
@@ -585,7 +585,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
                     }
                 }
 
-                if (freq > 0 && residency_ns > 0) {
+                if (freq > 0 and residency_ns > 0) {
                     weighted_freq += freq * residency_ns;
                     weighted_volt += volt * residency_ns;
                     active_time += residency_ns;
@@ -609,7 +609,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
         }
 
         //? Temperature
-        if (group == "GPU Stats" && subgroup == "Temperature") {
+        if (group == "GPU Stats" and subgroup == "Temperature") {
             int64_t value = IOReport::SimpleGetIntegerValue(channel, 0);
             if (channel_name == "Average Sum")
                 temp_sum = static_cast<double>(value);
@@ -618,7 +618,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
         }
 
         //? GPU Energy
-        if (group == "Energy Model" &&
+        if (group == "Energy Model" and
             channel_name.find("GPU Energy") != std::string::npos) {
             auto unit =
                 SafeCFStringToStdString(IOReport::ChannelGetUnitLabel(channel))
@@ -635,7 +635,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
     }
 
     //? Compute power in mW
-    if (elapsedSeconds > 0 && n_joule > 0) {
+    if (elapsedSeconds > 0 and n_joule > 0) {
         statistics.milliwatts =
             static_cast<double>(n_joule) * 1e-6 / elapsedSeconds;
     }
@@ -643,7 +643,7 @@ void GPU::ParserChannels(CFDictionaryRef delta, double elapsedSeconds) {
     //? This no work in my M4 pro
     //? Calculate average temperature
     //? IOReport temperature values are in centiCelsius (hundredths of a degree)
-    if (temp_count > 0 && temp_sum > 0) {
+    if (temp_count > 0 and temp_sum > 0) {
         statistics.temp_c =
             (temp_sum / static_cast<double>(temp_count)) / 100.0;
     }

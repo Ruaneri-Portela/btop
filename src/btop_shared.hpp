@@ -187,7 +187,7 @@ namespace Gpu {
 		extern bool shutdown();
 	}
 	#else
-	namespace Agx 
+	namespace IOAccelerator 
 	{
 		extern bool shutdown();
 	}

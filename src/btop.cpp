@@ -227,7 +227,7 @@ void clean_quit(int sig) {
 	Gpu::Nvml::shutdown();
 	Gpu::Rsmi::shutdown();
 #else 
-	Gpu::Agx::shutdown();
+	Gpu::IOAccelerator::shutdown();
 #endif
 #endif
 
