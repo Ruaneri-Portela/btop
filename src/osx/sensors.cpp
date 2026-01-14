@@ -42,7 +42,7 @@ double getValue(IOHIDServiceClientRef sc) {
 }  // extern C
 
 long long Cpu::ThermalSensors::getSensors() {
-	CFDictionaryRef thermalSensors = CreateHidMatching(0xff00, 5);  // 65280_10 = FF00_16
+	CFDictionaryRef thermalSensors = create_hid_matching(0xff00, 5);  // 65280_10 = FF00_16
 														   // thermalSensors's PrimaryUsagePage should be 0xff00 for M1 chip, instead of 0xff05
 														   // can be checked by ioreg -lfx
 	IOHIDEventSystemClientRef system = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
@@ -56,7 +56,7 @@ long long Cpu::ThermalSensors::getSensors() {
 			if (sc) {
 				CFStringRef name = IOHIDServiceClientCopyProperty(sc, CFSTR("Product"));  // here we use ...CopyProperty
 				if (name) {
-					std::string n = SafeCFStringToStdString(name).value_or("");
+					std::string n = safe_cfstring_to_std_string(name).value_or("");
 					
 					if (n.starts_with("eACC") or n.starts_with("pACC")) {
 						temps.push_back(getValue(sc));

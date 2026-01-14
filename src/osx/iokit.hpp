@@ -31,41 +31,41 @@
 
 using IOServiceCallback = bool (*)(io_object_t object, void *data);
 
-std::optional<std::string> SafeCFStringToStdString(CFStringRef strRef);
+std::optional<std::string> safe_cfstring_to_std_string(CFStringRef strRef);
 
-std::optional<int64_t> SafeCFNumberToInt64(CFNumberRef numberRef);
+std::optional<int64_t> safe_cfnumber_to_int64(CFNumberRef numberRef);
 
-std::optional<std::vector<uint8_t>> SafeCFDataToRawVector(CFDataRef dataRef);
+std::optional<std::vector<uint8_t>> safe_cfdata_to_raw_vector(CFDataRef dataRef);
 
-std::optional<bool> SafeCFBooleanToBool(CFBooleanRef boolRef);
+std::optional<bool> safe_cfbool_to_bool(CFBooleanRef boolRef);
 
 std::optional<std::string>
-SafeIOServiceGetStringFromDictionary(CFDictionaryRef dictionary,
+safe_cfdictionary_to_std_string(CFDictionaryRef dictionary,
                                      CFStringRef key);
 
 std::optional<int64_t>
-SafeIOServiceGetNumberFromDictionary(CFDictionaryRef dictionary,
+safe_cfdictionary_to_int64(CFDictionaryRef dictionary,
                                      CFStringRef key);
 
 std::optional<std::vector<uint8_t>>
-SafeIOServiceGetDataVectorFromDictionary(CFDictionaryRef dictionary,
+safe_cfdictionary_to_raw_vector(CFDictionaryRef dictionary,
                                          CFStringRef key);
 
-std::optional<bool> SafeIOServiceBoolFromDictionary(CFDictionaryRef dictionary,
+std::optional<bool> safe_cfdictionary_to_bool(CFDictionaryRef dictionary,
                                                     CFStringRef key);
 
-io_registry_entry_t IOServiceGetParent(io_registry_entry_t entry,
+io_registry_entry_t io_service_get_parent(io_registry_entry_t entry,
                                        const io_name_t plane);
 
-bool IOServiceGenericIterator(const std::string &className,
+bool io_service_class_interator(const std::string &className,
                               IOServiceCallback callback, void *data);
 
-bool IOServiceGenericChildrenIterator(io_object_t parent, const io_name_t plane,
+bool io_service_children_interator(io_object_t parent, const io_name_t plane,
                                       IOServiceCallback callback, void *data);
 
 namespace IOReport {
 using IOReportSubscriptionRef = CFTypeRef;
-extern void *LibHandle;
+extern void *lib_handle;
 extern bool TryLoaded;
 
 extern CFDictionaryRef (*CopyChannelsInGroup)(CFStringRef, CFStringRef,
@@ -95,7 +95,7 @@ extern CFStringRef (*StateGetNameForIndex)(CFDictionaryRef, int32_t);
 extern int64_t (*StateGetResidency)(CFDictionaryRef, int32_t);
 extern int64_t (*SimpleGetIntegerValue)(CFDictionaryRef, int32_t);
 
-void TryLoad();
+void try_load();
 } // namespace IOReport
 
 // IOHIDSensor declarations for GPU temperature
@@ -122,5 +122,5 @@ CFStringRef IOHIDServiceClientCopyProperty(IOHIDServiceClientRef service,
                                            CFStringRef property);
 IOHIDFloat IOHIDEventGetFloatValue(IOHIDEventRef event, int32_t field);
 
-CFDictionaryRef CreateHidMatching(int page, int usage);
+CFDictionaryRef create_hid_matching(int page, int usage);
 }

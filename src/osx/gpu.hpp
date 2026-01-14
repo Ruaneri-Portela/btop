@@ -42,9 +42,9 @@ class GPUActivities {
     GPUActivities(io_object_t io_accelerator_children);
 
   private:
-    void mapKeyToUsageString(GPUActivities::Usage &usage,
+    static void map_key_to_usage_string(GPUActivities::Usage &usage,
                              const std::string &key, const std::string &value);
-    void mapKeyToUsageNumber(GPUActivities::Usage &usage,
+    static void map_key_to_usage_number(GPUActivities::Usage &usage,
                              const std::string &key, int64_t value);
 };
 
@@ -78,9 +78,9 @@ class GPU {
 
     PerformanceStatistics statistics;
 
-    uint64_t prevGpuSecondsElapsed = 0;
-    uint64_t actualGpuInternalTime = 0;
-    uint64_t lastGpuInternalTime = 0;
+    uint64_t prev_gpu_elapsed_seconds = 0;
+    uint64_t actual_gpu_internal_time = 0;
+    uint64_t last_gpu_internal_time = 0;
     std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>>
         last_activities;
     std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>>
@@ -92,17 +92,17 @@ class GPU {
     uint32_t max_freq = 0;
     uint32_t mav_voltage = 0;
 
-    void LookupProcessPercentage();
-    void Lookup(io_object_t ioAccelerator);
-    void mapKeyToPerformanceStatistics(const std::string &key, int64_t value);
-    void ParserChannels(CFDictionaryRef delta, double elapsed_seconds);
+    void lookup_process_percentage();
+    void lookup(io_object_t ioAccelerator);
+    void map_ley_to_performace_statistics(const std::string &key, int64_t value);
+    void parser_channels(CFDictionaryRef delta, double elapsed_seconds);
 
-    static bool childrenIteratorCallback(io_object_t object, void *data);
+    static bool children_iterator_callback(io_object_t object, void *data);
 
-    static bool appleArmIoDeviceIteratorCallback(io_object_t object,
+    static bool apple_arm_io_device_interator_callback(io_object_t object,
                                                  void *data);
 
-    uint64_t prevSampleTime = 0;
+    uint64_t prev_sample_time = 0;
     CFTypeRef subscription = nullptr;
     CFMutableDictionaryRef channels = nullptr;
     CFDictionaryRef prevSample = nullptr;
@@ -112,12 +112,12 @@ class GPU {
 
     const std::unordered_map<pid_t,
                              std::tuple<GPUActivities, uint64_t, double>> &
-    getActivities() const;
-    const PerformanceStatistics &getStatistics() const;
-    const std::string &getName() const;
-    const int64_t &getCoreCount() const;
+    get_activities() const;
+    const PerformanceStatistics &get_statistics() const;
+    const std::string &get_name() const;
+    const int64_t &get_core_count() const;
 
-    bool Refesh();
+    bool refesh();
 
     ~GPU();
 };
@@ -125,10 +125,10 @@ class GPU {
 class IOGPU {
   private:
     std::vector<GPU> gpus;
-    static bool iteratorCallback(io_object_t object, void *data);
+    static bool iterator_gpu_callback(io_object_t object, void *data);
     static void ioReportTryLoad();
 
   public:
     IOGPU();
-    std::vector<GPU> &getGPUs();
+    std::vector<GPU> &get_gpus();
 };

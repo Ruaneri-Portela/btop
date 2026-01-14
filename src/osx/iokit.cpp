@@ -24,7 +24,7 @@
 
 //? IOReport non public objects
 namespace IOReport {
-void *LibHandle = nullptr;
+void *lib_handle = nullptr;
 bool TryLoaded = false;
 
 CFDictionaryRef (*CopyChannelsInGroup)(CFStringRef, CFStringRef, uint64_t,
@@ -53,24 +53,24 @@ CFStringRef (*StateGetNameForIndex)(CFDictionaryRef, int32_t) = nullptr;
 int64_t (*StateGetResidency)(CFDictionaryRef, int32_t) = nullptr;
 int64_t (*SimpleGetIntegerValue)(CFDictionaryRef, int32_t) = nullptr;
 
-void TryLoad() {
+void try_load() {
     if (not TryLoaded)
         TryLoaded = true;
 
     //? This file does not actually exist if searched for in the Mac OS path,
     //however its functions are in the Mac OS libs cache.
-    LibHandle = dlopen("/usr/lib/libIOReport.dylib", RTLD_NOW);
-    if (LibHandle == nullptr) {
+    lib_handle = dlopen("/usr/lib/libIOReport.dylib", RTLD_NOW);
+    if (lib_handle == nullptr) {
         return;
     }
 
 //? Load all required functions
 #define LOAD_FUNC(sym)                                                         \
     sym = reinterpret_cast<decltype(IOReport::sym)>(                           \
-        dlsym(LibHandle, "IOReport" #sym));                                    \
+        dlsym(lib_handle, "IOReport" #sym));                                    \
     if (not sym) {                                                             \
-        dlclose(LibHandle);                                                    \
-        LibHandle = nullptr;                                                   \
+        dlclose(lib_handle);                                                    \
+        lib_handle = nullptr;                                                   \
         return;                                                                \
     }
 
@@ -97,17 +97,17 @@ void TryLoad() {
 //? Below, the items process CF objects for their std equivalents. Here, the
 //type is not verified, so make sure it is of the type called
 
-std::optional<std::string> SafeCFStringToStdString(CFStringRef strRef) {
-    if (not strRef)
+std::optional<std::string> safe_cfstring_to_std_string(CFStringRef string_ref) {
+    if (not string_ref)
         return std::nullopt;
 
     CFIndex maxSize = CFStringGetMaximumSizeForEncoding(
-                          CFStringGetLength(strRef), kCFStringEncodingUTF8) +
+                          CFStringGetLength(string_ref), kCFStringEncodingUTF8) +
                       1;
 
     std::string result(maxSize, '\0');
 
-    if (not CFStringGetCString(strRef, result.data(), maxSize,
+    if (not CFStringGetCString(string_ref, result.data(), maxSize,
                             kCFStringEncodingUTF8))
         return std::nullopt;
 
@@ -115,37 +115,37 @@ std::optional<std::string> SafeCFStringToStdString(CFStringRef strRef) {
     return result;
 }
 
-std::optional<int64_t> SafeCFNumberToInt64(CFNumberRef numberRef) {
-    if (not numberRef)
+std::optional<int64_t> safe_cfnumber_to_int64(CFNumberRef number_ref) {
+    if (not number_ref)
         return std::nullopt;
 
     int64_t value = 0;
-    if (not CFNumberGetValue(numberRef, kCFNumberSInt64Type, &value))
+    if (not CFNumberGetValue(number_ref, kCFNumberSInt64Type, &value))
         return std::nullopt;
 
     return value;
 }
 
-std::optional<std::vector<uint8_t>> SafeCFDataToRawVector(CFDataRef dataRef) {
-    if (not dataRef)
+std::optional<std::vector<uint8_t>> safe_cfdata_to_raw_vector(CFDataRef data_ref) {
+    if (not data_ref)
         return std::nullopt;
 
-    CFIndex length = CFDataGetLength(dataRef);
+    CFIndex length = CFDataGetLength(data_ref);
     if (length <= 0)
         return std::nullopt;
 
     std::vector<uint8_t> buffer(static_cast<size_t>(length));
 
-    CFDataGetBytes(dataRef, CFRangeMake(0, length), buffer.data());
+    CFDataGetBytes(data_ref, CFRangeMake(0, length), buffer.data());
 
     return buffer;
 }
 
-std::optional<bool> SafeCFBooleanToBool(CFBooleanRef boolRef) {
-    if (not boolRef)
+std::optional<bool> safe_cfbool_to_bool(CFBooleanRef bool_ref) {
+    if (not bool_ref)
         return std::nullopt;
 
-    return CFBooleanGetValue(boolRef);
+    return CFBooleanGetValue(bool_ref);
 }
 
 /*
@@ -160,7 +160,7 @@ It can be used as a quick test of the dictionary type.
 */
 
 std::optional<std::string>
-SafeIOServiceGetStringFromDictionary(CFDictionaryRef dictionary,
+safe_cfdictionary_to_std_string(CFDictionaryRef dictionary,
                                      CFStringRef key) {
     if (not dictionary or not key)
         return std::nullopt;
@@ -169,11 +169,11 @@ SafeIOServiceGetStringFromDictionary(CFDictionaryRef dictionary,
     if (not value or CFGetTypeID(value) != CFStringGetTypeID())
         return std::nullopt;
 
-    return SafeCFStringToStdString(static_cast<CFStringRef>(value));
+    return safe_cfstring_to_std_string(static_cast<CFStringRef>(value));
 }
 
 std::optional<int64_t>
-SafeIOServiceGetNumberFromDictionary(CFDictionaryRef dictionary,
+safe_cfdictionary_to_int64(CFDictionaryRef dictionary,
                                      CFStringRef key) {
     if (not dictionary or not key)
         return std::nullopt;
@@ -182,11 +182,11 @@ SafeIOServiceGetNumberFromDictionary(CFDictionaryRef dictionary,
     if (not value or CFGetTypeID(value) != CFNumberGetTypeID())
         return std::nullopt;
 
-    return SafeCFNumberToInt64(static_cast<CFNumberRef>(value));
+    return safe_cfnumber_to_int64(static_cast<CFNumberRef>(value));
 }
 
 std::optional<std::vector<uint8_t>>
-SafeIOServiceGetDataVectorFromDictionary(CFDictionaryRef dictionary,
+safe_cfdictionary_to_raw_vector(CFDictionaryRef dictionary,
                                          CFStringRef key) {
     if (not dictionary or not key)
         return std::nullopt;
@@ -195,10 +195,10 @@ SafeIOServiceGetDataVectorFromDictionary(CFDictionaryRef dictionary,
     if (not value or CFGetTypeID(value) != CFDataGetTypeID())
         return std::nullopt;
 
-    return SafeCFDataToRawVector(static_cast<CFDataRef>(value));
+    return safe_cfdata_to_raw_vector(static_cast<CFDataRef>(value));
 }
 
-std::optional<bool> SafeIOServiceBoolFromDictionary(CFDictionaryRef dictionary,
+std::optional<bool> safe_cfdictionary_to_bool(CFDictionaryRef dictionary,
                                                     CFStringRef key) {
     if (not dictionary or  not key)
         return std::nullopt;
@@ -207,7 +207,7 @@ std::optional<bool> SafeIOServiceBoolFromDictionary(CFDictionaryRef dictionary,
     if (!value or CFGetTypeID(value) != CFBooleanGetTypeID())
         return std::nullopt;
 
-    return SafeCFBooleanToBool(static_cast<CFBooleanRef>(value));
+    return safe_cfbool_to_bool(static_cast<CFBooleanRef>(value));
 }
 
 /*
@@ -215,7 +215,7 @@ Helps obtain the parent item of the object in the IOKit tree.
 Returns the entry of the object that now belongs to the caller's management.
 */
 
-io_registry_entry_t IOServiceGetParent(io_registry_entry_t entry,
+io_registry_entry_t io_service_get_parent(io_registry_entry_t entry,
                                        const io_name_t plane) {
     io_iterator_t iterator = IO_OBJECT_NULL;
 
@@ -236,7 +236,7 @@ that enters the function. When returning true, it iterates to the next one; when
 returning false, it iterates to the previous one.
 */
 
-bool IOServiceGenericIterator(const std::string &className,
+bool io_service_class_interator(const std::string &className,
                               IOServiceCallback callback, void *data) {
     CFDictionaryRef matching = IOServiceMatching(className.c_str());
     if (not matching)
@@ -269,7 +269,7 @@ When returning true, it iterates to the next one; when returning false, it
 iterates to the previous one.
 */
 
-bool IOServiceGenericChildrenIterator(io_object_t parent, const io_name_t plane,
+bool io_service_children_interator(io_object_t parent, const io_name_t plane,
                                       IOServiceCallback callback, void *data) {
     io_iterator_t iterator = IO_OBJECT_NULL;
 
@@ -295,7 +295,7 @@ bool IOServiceGenericChildrenIterator(io_object_t parent, const io_name_t plane,
 extern "C" {
 //? create a dict ref, like for temperature sensor {"PrimaryUsagePage":0xff00,
 //"PrimaryUsage":0x5}
-CFDictionaryRef CreateHidMatching(int page, int usage) {
+CFDictionaryRef create_hid_matching(int page, int usage) {
     CFNumberRef nums[2];
     CFStringRef keys[2];
 

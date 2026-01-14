@@ -455,10 +455,10 @@ namespace Cpu {
 					CFDictionaryRef one_ps = IOPSGetPowerSourceDescription(ps_info(), CFArrayGetValueAtIndex(one_ps_descriptor(), 0));
 					has_battery = true;
 
-					int32_t estimatedMinutesRemaining = SafeIOServiceGetNumberFromDictionary(one_ps, CFSTR(kIOPSTimeToEmptyKey)).value_or(0);
+					int32_t estimatedMinutesRemaining = safe_cfdictionary_to_int64(one_ps, CFSTR(kIOPSTimeToEmptyKey)).value_or(0);
 					seconds = estimatedMinutesRemaining * 60;
-					percent = SafeIOServiceGetNumberFromDictionary(one_ps, CFSTR(kIOPSCurrentCapacityKey)).value_or(0);
-					bool charging =  SafeIOServiceBoolFromDictionary(one_ps,  CFSTR(kIOPSIsChargingKey)).value_or(false);
+					percent = safe_cfdictionary_to_int64(one_ps, CFSTR(kIOPSCurrentCapacityKey)).value_or(0);
+					bool charging =  safe_cfdictionary_to_bool(one_ps,  CFSTR(kIOPSIsChargingKey)).value_or(false);
 					if (charging) {
 						status = "charging";
 					}
@@ -631,8 +631,8 @@ namespace Mem {
 
 					CFMutableDictionaryRef properties = nullptr;
 					if (IORegistryEntryCreateCFProperties(volumeRef, &properties, kCFAllocatorDefault, 0) == KERN_SUCCESS) {
-						bsdName = SafeIOServiceGetStringFromDictionary(properties, CFSTR("BSD Name")).value_or("");
-						device  = SafeIOServiceGetStringFromDictionary(properties, CFSTR("VolGroupMntFromName")).value_or("");
+						bsdName = safe_cfdictionary_to_std_string(properties, CFSTR("BSD Name")).value_or("");
+						device  = safe_cfdictionary_to_std_string(properties, CFSTR("VolGroupMntFromName")).value_or("");
 					}
 					
 					if (!mapping.contains(device)) {
@@ -647,7 +647,7 @@ namespace Mem {
 									CFDictionaryRef statistics = (CFDictionaryRef)CFDictionaryGetValue(properties, CFSTR("Statistics"));
 									if (statistics) {
 										disk_ios++;
-										int64_t readBytes = SafeIOServiceGetNumberFromDictionary(statistics, CFSTR("Bytes read from block device")).value_or(0);
+										int64_t readBytes = safe_cfdictionary_to_int64(statistics, CFSTR("Bytes read from block device")).value_or(0);
 										if (disk.io_read.empty())
 											disk.io_read.push_back(0);
 										else
@@ -655,7 +655,7 @@ namespace Mem {
 										disk.old_io.at(0) = readBytes;
 										while (cmp_greater(disk.io_read.size(), width * 2)) disk.io_read.pop_front();
 
-										int64_t writeBytes = SafeIOServiceGetNumberFromDictionary(statistics, CFSTR("Bytes written to block device")).value_or(0);
+										int64_t writeBytes = safe_cfdictionary_to_int64(statistics, CFSTR("Bytes written to block device")).value_or(0);
 										if (disk.io_write.empty())
 											disk.io_write.push_back(0);
 										else
@@ -1481,7 +1481,7 @@ namespace Gpu {
         //? Initialize Apple Silicon GPU monitoring Although the chips always have 1 GPU, I assume we can reuse them later on Intel Macs.
         bool init() {
             const size_t index = gpus.size();
-            auto & io_gpus = io_gpu.getGPUs();
+            auto & io_gpus = io_gpu.get_gpus();
 			device_count += io_gpus.size();
 
 			if (io_gpus.empty())
@@ -1492,8 +1492,8 @@ namespace Gpu {
 			for(size_t i = 0; i < io_gpus.size() ; i++){
 				gpus.emplace_back();  
 				std::string name = fmt::format("{} ({})",
-                               io_gpus[i].getName(),
-                               io_gpus[i].getCoreCount());
+                               io_gpus[i].get_name(),
+                               io_gpus[i].get_core_count());
             	gpu_names.emplace_back(name);
 				collect<true>(&gpus[index], i);
 			}
@@ -1517,9 +1517,9 @@ namespace Gpu {
 					gpus_slice->supported_functions = {
 						.gpu_utilization = true,
 						.mem_utilization = false,
-						.gpu_clock = IOReport::LibHandle ? true : false,
+						.gpu_clock = IOReport::lib_handle ? true : false,
 						.mem_clock = false,
-						.pwr_usage = IOReport::LibHandle ? true : false,
+						.pwr_usage = IOReport::lib_handle ? true : false,
 						.pwr_state = false,
 						.temp_info = false, // IOReport::LibHandle ? true : false
 						.mem_total = true,
@@ -1531,12 +1531,12 @@ namespace Gpu {
 					gpus_slice->pwr_max_usage = 30'000; //? 30w
 				}
 
-				auto& io_gpus = io_gpu.getGPUs();
+				auto& io_gpus = io_gpu.get_gpus();
 				if (io_gpus.empty())
 					return false;
 				
-				io_gpus[i].Refesh();
-				auto gpu_data = io_gpus[i].getStatistics();
+				io_gpus[i].refesh();
+				auto gpu_data = io_gpus[i].get_statistics();
 
 				gpus_slice->gpu_percent.at("gpu-totals").push_back(gpu_data.device_utilization);
 
@@ -1551,7 +1551,7 @@ namespace Gpu {
 				gpus_slice->gpu_percent.at("gpu-vram-totals").push_back(mem_percent);
 				//gpus_slice->mem_utilization_percent.push_back(mem_percent);
 
-				if(IOReport::LibHandle){
+				if(IOReport::lib_handle){
 					gpus_slice->gpu_percent.at("gpu-pwr-totals").push_back(gpu_data.milliwatts);
 					gpus_slice->pwr_usage = gpu_data.milliwatts;
 					gpus_slice->gpu_clock_speed = gpu_data.gpu_frequency / 1'000'000;
