@@ -42,10 +42,8 @@ class GPUActivities {
     GPUActivities(io_object_t io_accelerator_children);
 
   private:
-    static void map_key_to_usage_string(GPUActivities::Usage &usage,
-                             const std::string &key, const std::string &value);
-    static void map_key_to_usage_number(GPUActivities::Usage &usage,
-                             const std::string &key, int64_t value);
+    static void map_key_to_usage_string(GPUActivities::Usage &usage, const std::string &key, const std::string &value);
+    static void map_key_to_usage_number(GPUActivities::Usage &usage, const std::string &key, int64_t value);
 };
 
 class GPU {
@@ -81,10 +79,8 @@ class GPU {
     uint64_t prev_gpu_elapsed_seconds = 0;
     uint64_t actual_gpu_internal_time = 0;
     uint64_t last_gpu_internal_time = 0;
-    std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>>
-        last_activities;
-    std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>>
-        actual_activities;
+    std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> last_activities;
+    std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> actual_activities;
 
     int64_t core_count;
 
@@ -110,8 +106,7 @@ class GPU {
   public:
     GPU(io_object_t io_accelerator);
 
-    const std::unordered_map<pid_t,
-                             std::tuple<GPUActivities, uint64_t, double>> &
+    const std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> &
     get_activities() const;
     const PerformanceStatistics &get_statistics() const;
     const std::string &get_name() const;

@@ -19,8 +19,9 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOKitLib.h>
 #include <IOKit/hidsystem/IOHIDEventSystemClient.h>
+
 #include <cstdint>
-#include <cstring>  
+#include <cstring>
 #include <optional>
 #include <string>
 #include <vector>
@@ -35,68 +36,66 @@ std::optional<std::string> safe_cfstring_to_std_string(CFStringRef strRef);
 
 std::optional<int64_t> safe_cfnumber_to_int64(CFNumberRef numberRef);
 
-std::optional<std::vector<uint8_t>> safe_cfdata_to_raw_vector(CFDataRef dataRef);
+std::optional<std::vector<uint8_t>> safe_cfdata_to_raw_vector(
+    CFDataRef dataRef);
 
 std::optional<bool> safe_cfbool_to_bool(CFBooleanRef boolRef);
 
-std::optional<std::string>
-safe_cfdictionary_to_std_string(CFDictionaryRef dictionary,
-                                     CFStringRef key);
+std::optional<std::string> safe_cfdictionary_to_std_string(
+    CFDictionaryRef dictionary, CFStringRef key);
 
-std::optional<int64_t>
-safe_cfdictionary_to_int64(CFDictionaryRef dictionary,
-                                     CFStringRef key);
+std::optional<int64_t> safe_cfdictionary_to_int64(CFDictionaryRef dictionary,
+                                                  CFStringRef key);
 
-std::optional<std::vector<uint8_t>>
-safe_cfdictionary_to_raw_vector(CFDictionaryRef dictionary,
-                                         CFStringRef key);
+std::optional<std::vector<uint8_t>> safe_cfdictionary_to_raw_vector(
+    CFDictionaryRef dictionary, CFStringRef key);
 
 std::optional<bool> safe_cfdictionary_to_bool(CFDictionaryRef dictionary,
-                                                    CFStringRef key);
+                                              CFStringRef key);
 
 io_registry_entry_t io_service_get_parent(io_registry_entry_t entry,
-                                       const io_name_t plane);
+                                          const io_name_t plane);
 
 bool io_service_class_interator(const std::string &className,
-                              IOServiceCallback callback, void *data);
+                                IOServiceCallback callback, void *data);
 
 bool io_service_children_interator(io_object_t parent, const io_name_t plane,
-                                      IOServiceCallback callback, void *data);
+                                   IOServiceCallback callback, void *data);
 
 namespace IOReport {
 using IOReportSubscriptionRef = CFTypeRef;
-extern void *lib_handle;
-extern bool TryLoaded;
+        extern void *lib_handle;
+        extern bool try_loaded;
 
-extern CFDictionaryRef (*CopyChannelsInGroup)(CFStringRef, CFStringRef,
-                                              uint64_t, uint64_t, uint64_t);
+        extern CFDictionaryRef (*CopyChannelsInGroup)(CFStringRef, CFStringRef,
+                                                uint64_t, uint64_t, uint64_t);
 
-extern void (*MergeChannels)(CFDictionaryRef, CFDictionaryRef, CFTypeRef);
+        extern void (*MergeChannels)(CFDictionaryRef, CFDictionaryRef, CFTypeRef);
 
-extern IOReportSubscriptionRef (*CreateSubscription)(void *,
-                                                     CFMutableDictionaryRef,
-                                                     CFMutableDictionaryRef *,
-                                                     uint64_t, CFTypeRef);
+        extern IOReportSubscriptionRef (*CreateSubscription)(void *,
+                                                        CFMutableDictionaryRef,
+                                                        CFMutableDictionaryRef *,
+                                                        uint64_t, CFTypeRef);
 
-extern CFDictionaryRef (*CreateSamples)(IOReportSubscriptionRef,
-                                        CFMutableDictionaryRef, CFTypeRef);
+        extern CFDictionaryRef (*CreateSamples)(IOReportSubscriptionRef,
+                                                CFMutableDictionaryRef, CFTypeRef);
 
-extern CFDictionaryRef (*CreateSamplesDelta)(CFDictionaryRef, CFDictionaryRef,
-                                             CFTypeRef);
+        extern CFDictionaryRef (*CreateSamplesDelta)(CFDictionaryRef, CFDictionaryRef,
+                                                CFTypeRef);
 
-extern CFStringRef (*ChannelGetGroup)(CFDictionaryRef);
-extern CFStringRef (*ChannelGetSubGroup)(CFDictionaryRef);
-extern CFStringRef (*ChannelGetChannelName)(CFDictionaryRef);
-extern CFStringRef (*ChannelGetUnitLabel)(CFDictionaryRef);
-extern CFStringRef (*ChannelGetDriverName)(CFDictionaryRef);
+        extern CFStringRef (*ChannelGetGroup)(CFDictionaryRef);
+        extern CFStringRef (*ChannelGetSubGroup)(CFDictionaryRef);
+        extern CFStringRef (*ChannelGetChannelName)(CFDictionaryRef);
+        extern CFStringRef (*ChannelGetUnitLabel)(CFDictionaryRef);
+        extern CFStringRef (*ChannelGetDriverName)(CFDictionaryRef);
 
-extern int32_t (*StateGetCount)(CFDictionaryRef);
-extern CFStringRef (*StateGetNameForIndex)(CFDictionaryRef, int32_t);
-extern int64_t (*StateGetResidency)(CFDictionaryRef, int32_t);
-extern int64_t (*SimpleGetIntegerValue)(CFDictionaryRef, int32_t);
+        extern int32_t (*StateGetCount)(CFDictionaryRef);
+        extern CFStringRef (*StateGetNameForIndex)(CFDictionaryRef, int32_t);
+        extern int64_t (*StateGetResidency)(CFDictionaryRef, int32_t);
+        extern int64_t (*SimpleGetIntegerValue)(CFDictionaryRef, int32_t);
 
-void try_load();
-} // namespace IOReport
+        void try_load();
+}  // namespace IOReport
 
 // IOHIDSensor declarations for GPU temperature
 extern "C" {
@@ -111,8 +110,8 @@ typedef float IOHIDFloat;
 #define IOHIDEventFieldBase(type) (type << 16)
 #define kIOHIDEventTypeTemperature 15
 
-IOHIDEventSystemClientRef
-IOHIDEventSystemClientCreate(CFAllocatorRef allocator);
+IOHIDEventSystemClientRef IOHIDEventSystemClientCreate(
+    CFAllocatorRef allocator);
 int IOHIDEventSystemClientSetMatching(IOHIDEventSystemClientRef client,
                                       CFDictionaryRef match);
 CFArrayRef IOHIDEventSystemClientCopyServices(IOHIDEventSystemClientRef);

@@ -1484,16 +1484,15 @@ namespace Gpu {
             auto & io_gpus = io_gpu.get_gpus();
 			device_count += io_gpus.size();
 
-			if (io_gpus.empty())
-                return false;
-
+			if (io_gpus.empty()) {
+				 return false;
+			}
+               
 			initialized = true;
 
 			for(size_t i = 0; i < io_gpus.size() ; i++){
 				gpus.emplace_back();  
-				std::string name = fmt::format("{} ({})",
-                               io_gpus[i].get_name(),
-                               io_gpus[i].get_core_count());
+				std::string name = fmt::format("{} ({})", io_gpus[i].get_name(), io_gpus[i].get_core_count());
             	gpu_names.emplace_back(name);
 				collect<true>(&gpus[index], i);
 			}
@@ -1509,8 +1508,9 @@ namespace Gpu {
         //? Collect GPU metrics into the provided slice
         template <bool is_init>
         bool collect(gpu_info* gpus_slice, size_t index) {
-			if (not initialized) 
+			if (not initialized) {
 				return false;
+			}
 
 			for(size_t i = 0; i <= index ; i++){
 				if constexpr (is_init) {
@@ -1532,8 +1532,9 @@ namespace Gpu {
 				}
 
 				auto& io_gpus = io_gpu.get_gpus();
-				if (io_gpus.empty())
+				if (io_gpus.empty()) {
 					return false;
+				}
 				
 				io_gpus[i].refesh();
 				auto gpu_data = io_gpus[i].get_statistics();
@@ -1544,14 +1545,12 @@ namespace Gpu {
 				gpus_slice->mem_used  = gpu_data.in_use_system_memory;
 				long long mem_percent = 0;
 				if (gpus_slice->mem_total > 0) {
-					mem_percent = static_cast<long long>(
-						(static_cast<double>(gpus_slice->mem_used) / static_cast<double>(gpus_slice->mem_total)) * 100.0
-					);
+					mem_percent = static_cast<long long>((static_cast<double>(gpus_slice->mem_used) / static_cast<double>(gpus_slice->mem_total)) * 100.0);
 				}
 				gpus_slice->gpu_percent.at("gpu-vram-totals").push_back(mem_percent);
 				//gpus_slice->mem_utilization_percent.push_back(mem_percent);
 
-				if(IOReport::lib_handle){
+				if(IOReport::lib_handle) {
 					gpus_slice->gpu_percent.at("gpu-pwr-totals").push_back(gpu_data.milliwatts);
 					gpus_slice->pwr_usage = gpu_data.milliwatts;
 					gpus_slice->gpu_clock_speed = gpu_data.gpu_frequency / 1'000'000;

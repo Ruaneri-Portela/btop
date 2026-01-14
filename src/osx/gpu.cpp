@@ -16,16 +16,18 @@
    indent = tab
    tab-size = 4
 */
-#include <cstring>  
-#include "gpu.hpp"
-#include "iokit.hpp"
+#include <mach/mach_time.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
-#include <mach/mach_time.h>
+#include <cstring>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
+
+#include "gpu.hpp"
+#include "iokit.hpp"
 
 //? Others
 static uint64_t get_time_ns() {
@@ -39,8 +41,7 @@ static uint64_t get_time_ns() {
 //? This non work with same reason what in sensors.cpp
 static double get_gpu_temperature() {
     CFDictionaryRef matching = create_hid_matching(0xff00, 5);
-    IOHIDEventSystemClientRef system =
-        IOHIDEventSystemClientCreate(kCFAllocatorDefault);
+    IOHIDEventSystemClientRef system = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
     IOHIDEventSystemClientSetMatching(system, matching);
     CFArrayRef services = IOHIDEventSystemClientCopyServices(system);
 
@@ -49,26 +50,21 @@ static double get_gpu_temperature() {
     if (services != nullptr) {
         CFIndex count = CFArrayGetCount(services);
         for (CFIndex i = 0; i < count; i++) {
-            IOHIDServiceClientRef service =
-                (IOHIDServiceClientRef)CFArrayGetValueAtIndex(services, i);
+            IOHIDServiceClientRef service = (IOHIDServiceClientRef)CFArrayGetValueAtIndex(services, i);
             if (service != nullptr) {
-                CFStringRef name =
-                    IOHIDServiceClientCopyProperty(service, CFSTR("Product"));
+                CFStringRef name = IOHIDServiceClientCopyProperty(service, CFSTR("Product"));
                 if (name != nullptr) {
                     std::string sensor_name =
                         safe_cfstring_to_std_string(name).value_or("");
                     CFRelease(name);
 
                     //? In M4 CPU show all cores temperatures, but need to
-                    //parser
+                    // parser
                     if (sensor_name.find("GPU") != std::string::npos) {
-                        IOHIDEventRef event = IOHIDServiceClientCopyEvent(
-                            service, kIOHIDEventTypeTemperature, 0, 0);
+                        IOHIDEventRef event = IOHIDServiceClientCopyEvent(service, kIOHIDEventTypeTemperature, 0, 0);
                         if (event != nullptr) {
-                            double temp = IOHIDEventGetFloatValue(
-                                event, IOHIDEventFieldBase(
-                                           kIOHIDEventTypeTemperature));
-                            if (temp > 0 and temp < 150) { //? Sanity check
+                            double temp = IOHIDEventGetFloatValue(event, IOHIDEventFieldBase(kIOHIDEventTypeTemperature));
+                            if (temp > 0 and temp < 150) {  //? Sanity check
                                 gpu_temp += temp;
                             }
                             CFRelease(event);
@@ -84,29 +80,21 @@ static double get_gpu_temperature() {
     return gpu_temp;
 }
 
-void GPUActivities::map_key_to_usage_number(GPUActivities::Usage &usage,
-                                        const std::string &key, int64_t value) {
-    static const std::unordered_map<std::string,
-                                    int64_t GPUActivities::Usage::*>
-        map = {
+void GPUActivities::map_key_to_usage_number(GPUActivities::Usage &usage, const std::string &key, int64_t value) {
+    static const std::unordered_map<std::string,int64_t GPUActivities::Usage::*> map = {
             {"accumulatedGPUTime", &GPUActivities::Usage::accumulated_gpu_time},
-
             {"lastSubmittedTime", &GPUActivities::Usage::last_submitted_time},
-        };
+    };
 
     if (auto it = map.find(key); it != map.end()) {
         usage.*(it->second) = value;
     }
 }
 
-void GPUActivities::map_key_to_usage_string(GPUActivities::Usage &usage,
-                                        const std::string &key,
-                                        const std::string &value) {
-    static const std::unordered_map<std::string,
-                                    std::string GPUActivities::Usage::*>
-        map = {
+void GPUActivities::map_key_to_usage_string(GPUActivities::Usage &usage, const std::string &key, const std::string &value) {
+    static const std::unordered_map<std::string, std::string GPUActivities::Usage::*> map = {
             {"API", &GPUActivities::Usage::api},
-        };
+    };
 
     if (auto it = map.find(key); it != map.end()) {
         usage.*(it->second) = value;
@@ -116,27 +104,22 @@ void GPUActivities::map_key_to_usage_string(GPUActivities::Usage &usage,
 //? Creates the process entry, the parameter entry, and the IOKit object that
 //? references it. Each process can have zero or more graphical usage contexts.
 GPUActivities::GPUActivities(io_object_t entry) {
-    CFTypeRef creator_ref = IORegistryEntryCreateCFProperty(
-        entry, CFSTR("IOUserClientCreator"), kCFAllocatorDefault, 0);
+    CFTypeRef creator_ref = IORegistryEntryCreateCFProperty(entry, CFSTR("IOUserClientCreator"), kCFAllocatorDefault, 0);
 
-    if (not creator_ref)
-        return;
+    if (not creator_ref) return;
 
-    auto creator =
-        safe_cfstring_to_std_string(static_cast<CFStringRef>(creator_ref));
+    auto creator = safe_cfstring_to_std_string(static_cast<CFStringRef>(creator_ref));
 
     CFRelease(creator_ref);
 
-    if (not creator)
-        return;
+    if (not creator) return;
 
     const std::string &s = *creator;
 
     const auto pidPos = s.find("pid ");
     const auto commaPos = s.find(',');
 
-    if (pidPos == std::string::npos or commaPos == std::string::npos)
-        return;
+    if (pidPos == std::string::npos or commaPos == std::string::npos) return;
 
     try {
         proc = std::stoul(s.substr(pidPos + 4, commaPos - (pidPos + 4)));
@@ -145,11 +128,9 @@ GPUActivities::GPUActivities(io_object_t entry) {
         return;
     }
 
-    CFTypeRef app_usage_ref = IORegistryEntryCreateCFProperty(
-        entry, CFSTR("AppUsage"), kCFAllocatorDefault, 0);
+    CFTypeRef app_usage_ref = IORegistryEntryCreateCFProperty(entry, CFSTR("AppUsage"), kCFAllocatorDefault, 0);
 
-    if (not app_usage_ref)
-        return;
+    if (not app_usage_ref) return;
 
     if (CFGetTypeID(app_usage_ref) != CFArrayGetTypeID()) {
         CFRelease(app_usage_ref);
@@ -162,12 +143,10 @@ GPUActivities::GPUActivities(io_object_t entry) {
     for (CFIndex i = 0; i < count; ++i) {
         CFTypeRef item = CFArrayGetValueAtIndex(app_usage_array, i);
 
-        if (!item or CFGetTypeID(item) != CFDictionaryGetTypeID())
-            continue;
+        if (!item or CFGetTypeID(item) != CFDictionaryGetTypeID()) continue;
 
         CFDictionaryRef usage_stats = static_cast<CFDictionaryRef>(item);
         if (usage_stats) {
-
             CFIndex count = CFDictionaryGetCount(usage_stats);
 
             std::vector<const void *> keys(count);
@@ -177,15 +156,12 @@ GPUActivities::GPUActivities(io_object_t entry) {
                                          values.data());
             GPUActivities::Usage new_usage{};
             for (CFIndex i = 0; i < count; ++i) {
-
                 CFStringRef keyRef = static_cast<CFStringRef>(keys[i]);
 
                 auto key = safe_cfstring_to_std_string(keyRef);
-                if (!key)
-                    continue;
+                if (!key) continue;
 
-                auto number =
-                    safe_cfdictionary_to_int64(usage_stats, keyRef);
+                auto number = safe_cfdictionary_to_int64(usage_stats, keyRef);
                 if (number.has_value()) {
                     map_key_to_usage_number(new_usage, *key, *number);
                     continue;
@@ -206,26 +182,19 @@ GPUActivities::GPUActivities(io_object_t entry) {
 
 //? Converts each entry to its value in the struct
 void GPU::map_ley_to_performace_statistics(const std::string &key, int64_t value) {
-    static const std::unordered_map<std::string,
-                                    int64_t PerformanceStatistics::*>
-        map = {
-            {"Alloc system memory",
-             &PerformanceStatistics::alloc_system_memory},
+    static const std::unordered_map<std::string, int64_t PerformanceStatistics::*>map = {
+            {"Alloc system memory", &PerformanceStatistics::alloc_system_memory},
             {"Allocated PB Size", &PerformanceStatistics::allocated_pb_size},
-            {"Device Utilization %",
-             &PerformanceStatistics::device_utilization},
-            {"In use system memory",
-             &PerformanceStatistics::in_use_system_memory},
-            {"In use system memory (driver)",
-             &PerformanceStatistics::in_use_system_memory_driver},
+            {"Device Utilization %", &PerformanceStatistics::device_utilization},
+            {"In use system memory", &PerformanceStatistics::in_use_system_memory},
+            {"In use system memory (driver)", &PerformanceStatistics::in_use_system_memory_driver},
             {"lastRecoveryTime", &PerformanceStatistics::last_recovery_time},
             {"recoveryCount", &PerformanceStatistics::recovery_count},
-            {"Renderer Utilization %",
-             &PerformanceStatistics::renderer_utilization},
+            {"Renderer Utilization %", &PerformanceStatistics::renderer_utilization},
             {"SplitSceneCount", &PerformanceStatistics::split_scene_count},
             {"TiledSceneBytes", &PerformanceStatistics::tiled_scene_bytes},
             {"Tiler Utilization %", &PerformanceStatistics::tiler_utilization},
-        };
+    };
 
     if (auto it = map.find(key); it != map.end()) {
         statistics.*(it->second) = value;
@@ -239,8 +208,9 @@ bool GPU::children_iterator_callback(io_object_t object, void *data) {
 
     GPUActivities new_activity(object);
 
-    if (new_activity.usage.size() == 0)
+    if (new_activity.usage.size() == 0) {
         return true;
+    }
 
     uint64_t total_usage = 0;
 
@@ -250,9 +220,7 @@ bool GPU::children_iterator_callback(io_object_t object, void *data) {
 
     self->actual_gpu_internal_time += total_usage;
 
-    self->actual_activities.insert_or_assign(
-        new_activity.proc,
-        std::make_tuple(std::move(new_activity), total_usage, 0));
+    self->actual_activities.insert_or_assign(new_activity.proc,std::make_tuple(std::move(new_activity), total_usage, 0));
 
     return true;
 }
@@ -265,16 +233,17 @@ bool GPU::apple_arm_io_device_interator_callback(io_object_t device, void *data)
     io_name_t name;
     IORegistryEntryGetName(device, name);
 
-    if (std::strcmp(name, "pmgr") != 0)
+    if (std::strcmp(name, "pmgr") != 0) {
         return true;
+    }
 
     CFMutableDictionaryRef properties = nullptr;
-    if (IORegistryEntryCreateCFProperties(
-            device, &properties, kCFAllocatorDefault, 0) != kIOReturnSuccess)
-        return false;
+    if (IORegistryEntryCreateCFProperties( device, &properties, kCFAllocatorDefault, 0) != kIOReturnSuccess) {
+          return false;
+    }
+      
 
-    auto buffer = safe_cfdictionary_to_raw_vector(
-        properties, CFSTR("voltage-states9"));
+    auto buffer = safe_cfdictionary_to_raw_vector(properties, CFSTR("voltage-states9"));
 
     if (buffer) {
         const auto &bytes = *buffer;
@@ -291,24 +260,24 @@ bool GPU::apple_arm_io_device_interator_callback(io_object_t device, void *data)
                 uint32_t voltage_uv = 0;
 
                 std::memcpy(&freq_hz, bytes.data() + i, sizeof(freq_hz));
-                std::memcpy(&voltage_uv, bytes.data() + i + 4,
-                            sizeof(voltage_uv));
+                std::memcpy(&voltage_uv, bytes.data() + i + 4,sizeof(voltage_uv));
 
                 if (freq_hz > 0) {
                     self->gpu_table.emplace_back(freq_hz, voltage_uv);
 
-                    if (freq_hz > max_freq)
+                    if (freq_hz > max_freq) {
                         max_freq = freq_hz;
-                    if (voltage_uv > max_voltage)
+                    }
+                    if (voltage_uv > max_voltage) {
                         max_voltage = voltage_uv;
+                    }
                 }
             }
 
             self->max_freq = max_freq;
             self->mav_voltage = max_voltage;
 
-            std::sort(self->gpu_table.begin(), self->gpu_table.end(),
-                      [](const auto &a, const auto &b) {
+            std::sort(self->gpu_table.begin(), self->gpu_table.end(),[](const auto &a, const auto &b) {
                           return std::get<0>(a) < std::get<0>(b);
                       });
         }
@@ -335,16 +304,17 @@ void GPU::lookup_process_percentage() {
             auto &target_percentage = std::get<2>(currTuple);
 
             auto it = last_activities.find(pid);
-            if (it == last_activities.end())
+            if (it == last_activities.end()) {
                 continue;
+            }
 
             auto &prev_total_time = std::get<1>(it->second);
 
-            uint64_t deltaGpuTime =
-                (totalTime >= prev_total_time) ? (totalTime - prev_total_time) : 0;
+            uint64_t deltaGpuTime = (totalTime >= prev_total_time) ? (totalTime - prev_total_time) : 0;
 
-            if (deltaGpuTime == 0)
+            if (deltaGpuTime == 0) {
                 continue;
+            }
 
             double relative = static_cast<double>(deltaGpuTime) / denom;
 
@@ -358,9 +328,7 @@ void GPU::lookup_process_percentage() {
 //? process list
 void GPU::lookup(io_object_t io_accelerator) {
     CFDictionaryRef perfStats =
-        static_cast<CFDictionaryRef>(IORegistryEntryCreateCFProperty(
-            io_accelerator, CFSTR("PerformanceStatistics"), kCFAllocatorDefault,
-            0));
+        static_cast<CFDictionaryRef>(IORegistryEntryCreateCFProperty(io_accelerator, CFSTR("PerformanceStatistics"), kCFAllocatorDefault,0));
 
     if (perfStats) {
         CFIndex count = CFDictionaryGetCount(perfStats);
@@ -371,15 +339,15 @@ void GPU::lookup(io_object_t io_accelerator) {
         CFDictionaryGetKeysAndValues(perfStats, keys.data(), values.data());
 
         for (CFIndex i = 0; i < count; ++i) {
-            auto key =
-                safe_cfstring_to_std_string(static_cast<CFStringRef>(keys[i]));
-            if (!key)
+            auto key = safe_cfstring_to_std_string(static_cast<CFStringRef>(keys[i]));
+            if (!key) {
                 continue;
+            }
 
-            auto value =
-                safe_cfnumber_to_int64(static_cast<CFNumberRef>(values[i]));
-            if (key)
+            auto value = safe_cfnumber_to_int64(static_cast<CFNumberRef>(values[i]));
+            if (key) {
                 map_ley_to_performace_statistics(*key, *value);
+            }
         }
 
         CFRelease(perfStats);
@@ -395,67 +363,55 @@ void GPU::lookup(io_object_t io_accelerator) {
 
     actual_activities.clear();
 
-    io_service_children_interator(io_accelerator, kIOServicePlane,
-                                     children_iterator_callback, this);
+    io_service_children_interator(io_accelerator, kIOServicePlane,children_iterator_callback, this);
 }
 
 GPU::GPU(io_object_t ioAccelerator) {
     // Save full path to fast refesh on some stats, eg. memeory
     io_name_t path;
-    if (IORegistryEntryGetPath(ioAccelerator, kIOServicePlane, path) !=
-        KERN_SUCCESS)
+    if (IORegistryEntryGetPath(ioAccelerator, kIOServicePlane, path) != KERN_SUCCESS){
         return;
-
+    }
+        
     io_path = std::string(path);
 
-    CFStringRef nameRef =
-        static_cast<CFStringRef>(IORegistryEntryCreateCFProperty(
-            ioAccelerator, CFSTR("model"), kCFAllocatorDefault, 0));
+    CFStringRef nameRef = static_cast<CFStringRef>(IORegistryEntryCreateCFProperty(ioAccelerator, CFSTR("model"), kCFAllocatorDefault, 0));
 
     if (nameRef) {
         name = safe_cfstring_to_std_string(nameRef).value_or("Undefined");
         CFRelease(nameRef);
     }
 
-    CFStringRef driverRef =
-        static_cast<CFStringRef>(IORegistryEntryCreateCFProperty(
-            ioAccelerator, CFSTR("IOClass"), kCFAllocatorDefault, 0));
+    CFStringRef driverRef = static_cast<CFStringRef>(IORegistryEntryCreateCFProperty(ioAccelerator, CFSTR("IOClass"), kCFAllocatorDefault, 0));
 
     if (driverRef) {
         driver = safe_cfstring_to_std_string(driverRef).value_or("Undefined");
         CFRelease(driverRef);
     }
 
-    CFNumberRef coreCountRef =
-        static_cast<CFNumberRef>(IORegistryEntryCreateCFProperty(
-            ioAccelerator, CFSTR("gpu-core-count"), kCFAllocatorDefault, 0));
+    CFNumberRef coreCountRef = static_cast<CFNumberRef>(IORegistryEntryCreateCFProperty(ioAccelerator, CFSTR("gpu-core-count"), kCFAllocatorDefault, 0));
 
     if (coreCountRef) {
         core_count = safe_cfnumber_to_int64(coreCountRef).value_or(0);
         CFRelease(coreCountRef);
     }
 
-    io_service_class_interator("AppleARMIODevice",
-                             apple_arm_io_device_interator_callback, this);
+    io_service_class_interator("AppleARMIODevice",apple_arm_io_device_interator_callback, this);
 
     lookup(ioAccelerator);
 
-    if (IOReport::lib_handle){
-         //? Open the channels
-        CFStringRef gpu_stats_group = CFStringCreateWithCString(
-            kCFAllocatorDefault, "GPU Stats", kCFStringEncodingUTF8);
-        CFDictionaryRef gpu_stats_channels =
-            IOReport::CopyChannelsInGroup(gpu_stats_group, nullptr, 0, 0, 0);
+    if (IOReport::lib_handle) {
+        //? Open the channels
+        CFStringRef gpu_stats_group = CFStringCreateWithCString(kCFAllocatorDefault, "GPU Stats", kCFStringEncodingUTF8);
+        CFDictionaryRef gpu_stats_channels = IOReport::CopyChannelsInGroup(gpu_stats_group, nullptr, 0, 0, 0);
         CFRelease(gpu_stats_group);
 
         if (gpu_stats_channels == nullptr) {
             return;
         }
 
-        CFStringRef energy_group = CFStringCreateWithCString(
-            kCFAllocatorDefault, "Energy Model", kCFStringEncodingUTF8);
-        CFDictionaryRef energy_channels =
-            IOReport::CopyChannelsInGroup(energy_group, nullptr, 0, 0, 0);
+        CFStringRef energy_group = CFStringCreateWithCString(kCFAllocatorDefault, "Energy Model", kCFStringEncodingUTF8);
+        CFDictionaryRef energy_channels = IOReport::CopyChannelsInGroup(energy_group, nullptr, 0, 0, 0);
         CFRelease(energy_group);
 
         if (energy_channels == nullptr) {
@@ -464,8 +420,7 @@ GPU::GPU(io_object_t ioAccelerator) {
         }
 
         //? Merge channels
-        channels = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0,
-                                                gpu_stats_channels);
+        channels = CFDictionaryCreateMutableCopy(kCFAllocatorDefault, 0, gpu_stats_channels);
 
         IOReport::MergeChannels(channels, energy_channels, nullptr);
         CFRelease(gpu_stats_channels);
@@ -473,8 +428,7 @@ GPU::GPU(io_object_t ioAccelerator) {
 
         //? Create subscription
         CFMutableDictionaryRef sub_channels = nullptr;
-        subscription = IOReport::CreateSubscription(nullptr, channels,
-                                                    &sub_channels, 0, nullptr);
+        subscription = IOReport::CreateSubscription(nullptr, channels, &sub_channels, 0, nullptr);
 
         if (subscription == nullptr) {
             return;
@@ -491,8 +445,7 @@ GPU::GPU(io_object_t ioAccelerator) {
 
 //? Processes the content received from IOReport
 void GPU::parser_channels(CFDictionaryRef delta, double elapsedSeconds) {
-    CFArrayRef channel_array =
-        (CFArrayRef)CFDictionaryGetValue(delta, CFSTR("IOReportChannels"));
+    CFArrayRef channel_array = (CFArrayRef)CFDictionaryGetValue(delta, CFSTR("IOReportChannels"));
     if (channel_array == nullptr or
         CFGetTypeID(channel_array) != CFArrayGetTypeID()) {
         return;
@@ -504,73 +457,61 @@ void GPU::parser_channels(CFDictionaryRef delta, double elapsedSeconds) {
     int64_t temp_count = 0;
 
     //? Map unit to nanojoules conversion factor
-    static const std::unordered_map<std::string, long long> unit_to_nj{
-        {"mJ", 1'000'000}, // 1 mJ = 1e6 nJ
-        {"uJ", 1'000},     // 1 µJ = 1e3 nJ
-        {"nJ", 1}          // 1 nJ = 1 nJ
+    static const std::unordered_map<std::string, long long> unit_to_nj {
+        {"mJ", 1'000'000},  // 1 mJ = 1e6 nJ
+        {"uJ", 1'000},      // 1 µJ = 1e3 nJ
+        {"nJ", 1}           // 1 nJ = 1 nJ
     };
 
     CFIndex count = CFArrayGetCount(channel_array);
 
     for (CFIndex i = 0; i < count; i++) {
-        CFDictionaryRef channel =
-            (CFDictionaryRef)CFArrayGetValueAtIndex(channel_array, i);
+        CFDictionaryRef channel = (CFDictionaryRef)CFArrayGetValueAtIndex(channel_array, i);
 
-        if (!channel or CFGetTypeID(channel) != CFDictionaryGetTypeID())
+        if (!channel or CFGetTypeID(channel) != CFDictionaryGetTypeID()) {
             continue;
+        }
 
         //? It's possible to check the driver name to see if it matches the
-        //IOClass of the GPU Class in IOKit; there's an ID at the end, but it's
-        //negligible.
-        auto driver_name =
-            safe_cfstring_to_std_string(IOReport::ChannelGetDriverName(channel))
-                .value_or("");
+        // IOClass of the GPU Class in IOKit; there's an ID at the end, but it's
+        // negligible.
+        auto driver_name = safe_cfstring_to_std_string(IOReport::ChannelGetDriverName(channel)).value_or("");
 
         //? Filter driver name on Channel values
-        if (driver_name.find(driver) == std::string::npos)
+        if (driver_name.find(driver) == std::string::npos) { 
             continue;
+        }
 
-        auto group = safe_cfstring_to_std_string(IOReport::ChannelGetGroup(channel))
-                         .value_or("");
-        auto subgroup =
-            safe_cfstring_to_std_string(IOReport::ChannelGetSubGroup(channel))
-                .value_or("");
-        auto channel_name =
-            safe_cfstring_to_std_string(IOReport::ChannelGetChannelName(channel))
-                .value_or("");
+        auto group = safe_cfstring_to_std_string(IOReport::ChannelGetGroup(channel)).value_or("");
+        auto subgroup = safe_cfstring_to_std_string(IOReport::ChannelGetSubGroup(channel)).value_or("");
+        auto channel_name = safe_cfstring_to_std_string(IOReport::ChannelGetChannelName(channel)).value_or("");
 
         //? GPU Performance States
-        if (group == "GPU Stats" and subgroup == "GPU Performance States" and
-            channel_name == "GPUPH") {
-
+        if (group == "GPU Stats" and subgroup == "GPU Performance States" and channel_name == "GPUPH") {
             int32_t state_count = IOReport::StateGetCount(channel);
             int64_t total_time = 0, active_time = 0;
             int64_t weighted_freq = 0, weighted_volt = 0;
 
             //? For each item listed here, we have the time the chip was in that
-            //mode and the position in the table where the chip was in its
-            //energy state.
+            // mode and the position in the table where the chip was in its
+            // energy state.
             for (int32_t s = 0; s < state_count; s++) {
-                auto state_name =
-                    safe_cfstring_to_std_string(
-                        IOReport::StateGetNameForIndex(channel, s))
-                        .value_or("");
+                auto state_name = safe_cfstring_to_std_string(IOReport::StateGetNameForIndex(channel, s)).value_or("");
 
                 int64_t residency_ns = IOReport::StateGetResidency(channel, s);
                 total_time += residency_ns;
 
-                if (state_name.empty() or state_name == "OFF" or
-                    state_name == "IDLE")
+                if (state_name.empty() or state_name == "OFF" or state_name == "IDLE") {
                     continue;
+                }
 
                 int64_t freq = 0, volt = 0;
                 //? Based on that saved table, we can identify which clock speed
-                //and voltage were currently being used.
+                // and voltage were currently being used.
                 if (state_name[0] == 'P' and state_name.length() > 1) {
                     try {
                         int pstate_idx = std::stoi(state_name.substr(1)) - 1;
-                        if (pstate_idx >= 0 and static_cast<size_t>(pstate_idx) <
-                                                   gpu_table.size()) {
+                        if (pstate_idx >= 0 and static_cast<size_t>(pstate_idx) < gpu_table.size()) {
                             freq = std::get<0>(gpu_table[pstate_idx]);
                             volt = std::get<1>(gpu_table[pstate_idx]);
                         }
@@ -597,36 +538,34 @@ void GPU::parser_channels(CFDictionaryRef delta, double elapsedSeconds) {
             }
 
             //? Normalizes over time. It generates more precise data, replacing
-            //the data from the simple search in the class.
+            // the data from the simple search in the class.
             if (total_time > 0) {
-                double usage_percent =
-                    (static_cast<double>(active_time) / total_time) * 100.0;
-                statistics.device_utilization =
-                    static_cast<int64_t>(std::clamp(usage_percent, 0.0, 100.0));
+                double usage_percent = (static_cast<double>(active_time) / total_time) * 100.0;
+                statistics.device_utilization = static_cast<int64_t>(std::clamp(usage_percent, 0.0, 100.0));
             }
         }
 
         //? Temperature
         if (group == "GPU Stats" and subgroup == "Temperature") {
             int64_t value = IOReport::SimpleGetIntegerValue(channel, 0);
-            if (channel_name == "Average Sum")
+            if (channel_name == "Average Sum") {
                 temp_sum = static_cast<double>(value);
-            else if (channel_name == "Average Sum Count")
+            }
+            else if (channel_name == "Average Sum Count") {
                 temp_count = value;
+            }
         }
 
         //? GPU Energy
-        if (group == "Energy Model" and
-            channel_name.find("GPU Energy") != std::string::npos) {
-            auto unit =
-                safe_cfstring_to_std_string(IOReport::ChannelGetUnitLabel(channel))
-                    .value_or("");
+        if (group == "Energy Model" and channel_name.find("GPU Energy") != std::string::npos) {
+            auto unit = safe_cfstring_to_std_string(IOReport::ChannelGetUnitLabel(channel)).value_or("");
 
             int64_t energy_value = IOReport::SimpleGetIntegerValue(channel, 0);
 
-            long long factor = 1'000'000'000; // default to 1 nJ = 1e-9 J
-            if (unit_to_nj.count(unit))
+            long long factor = 1'000'000'000;  // default to 1 nJ = 1e-9 J
+            if (unit_to_nj.count(unit)){
                 factor = unit_to_nj.at(unit);
+            }
 
             n_joule += energy_value * factor;
         }
@@ -634,25 +573,22 @@ void GPU::parser_channels(CFDictionaryRef delta, double elapsedSeconds) {
 
     //? Compute power in mW
     if (elapsedSeconds > 0 and n_joule > 0) {
-        statistics.milliwatts =
-            static_cast<double>(n_joule) * 1e-6 / elapsedSeconds;
+        statistics.milliwatts = static_cast<double>(n_joule) * 1e-6 / elapsedSeconds;
     }
 
     //? This no work in my M4 pro
     //? Calculate average temperature
     //? IOReport temperature values are in centiCelsius (hundredths of a degree)
     if (temp_count > 0 and temp_sum > 0) {
-        statistics.temp_c =
-            (temp_sum / static_cast<double>(temp_count)) / 100.0;
+        statistics.temp_c = (temp_sum / static_cast<double>(temp_count)) / 100.0;
     }
 }
 
 //? Reloads the GPU class data
 bool GPU::refesh() {
     //? With the path stored in memory, we can remove the entire GPU without
-    //having to iterate through the children again.
-    io_object_t ioAccelerator =
-        IORegistryEntryFromPath(kIOMainPortDefault, io_path.c_str());
+    // having to iterate through the children again.
+    io_object_t ioAccelerator = IORegistryEntryFromPath(kIOMainPortDefault, io_path.c_str());
 
     if (ioAccelerator == IO_OBJECT_NULL) {
         return false;
@@ -663,14 +599,12 @@ bool GPU::refesh() {
 
     //? IO Report provide Clock, Wattage and Temperature (but the last not work)
     if (IOReport::lib_handle) {
-        CFDictionaryRef currentSample =
-            IOReport::CreateSamples(subscription, channels, nullptr);
+        CFDictionaryRef currentSample = IOReport::CreateSamples(subscription, channels, nullptr);
 
         uint64_t currentTime = get_time_ns();
         double elapsedSeconds = (currentTime - prev_sample_time) / 1e9;
 
-        CFDictionaryRef delta =
-            IOReport::CreateSamplesDelta(prevSample, currentSample, nullptr);
+        CFDictionaryRef delta = IOReport::CreateSamplesDelta(prevSample, currentSample, nullptr);
 
         if (delta) {
             parser_channels(delta, elapsedSeconds);
@@ -693,8 +627,7 @@ bool GPU::refesh() {
     return true;
 }
 
-const std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> &
-GPU::get_activities() const {
+const std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> &GPU::get_activities() const {
     return actual_activities;
 }
 
@@ -706,11 +639,13 @@ const std::string &GPU::get_name() const { return name; }
 const int64_t &GPU::get_core_count() const { return core_count; }
 
 GPU::~GPU() {
-    if (prevSample)
+    if (prevSample) { 
         CFRelease(prevSample);
+    }
 
-    if (channels)
+    if (channels){ 
         CFRelease(channels);
+    }
 }
 // IOGPU
 
@@ -730,4 +665,6 @@ IOGPU::IOGPU() {
     io_service_class_interator("IOAccelerator", iterator_gpu_callback, this);
 }
 
-std::vector<GPU> &IOGPU::get_gpus() { return gpus; }
+std::vector<GPU> &IOGPU::get_gpus() { 
+    return gpus; 
+}
