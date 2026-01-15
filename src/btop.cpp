@@ -19,6 +19,7 @@ tab-size = 4
 #include "btop.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <csignal>
 #include <clocale>
 #include <filesystem>
@@ -358,6 +359,11 @@ namespace Runner {
 	atomic<bool> waiting (false);
 	atomic<bool> redraw (false);
 	atomic<bool> coreNum_reset (false);
+	
+	static inline auto set_active(bool value) noexcept {
+		active.store(value, std::memory_order_relaxed);
+		active.notify_all();
+	}
 
 	//* Setup semaphore for triggering thread to do work
 	// TODO: This can be made a local without too much effort.
@@ -749,7 +755,7 @@ namespace Runner {
 		atomic_wait_for(active, true, 5000);
 		if (active) {
 			Logger::error("Stall in Runner thread, restarting!");
-			active = false;
+			set_active(false);
 			// exit(1);
 			pthread_cancel(Runner::runner_id);
 
@@ -801,14 +807,16 @@ namespace Runner {
 		stopping = true;
 		int ret = pthread_mutex_trylock(&mtx);
 		if (ret != EBUSY and not Global::quitting) {
-			if (active) active = false;
+			if (active) {
+				set_active(false);
+			}
 			Global::exit_error_msg = "Runner thread died unexpectedly!";
 			clean_quit(1);
 		}
 		else if (ret == EBUSY) {
 			atomic_wait_for(active, true, 5000);
 			if (active) {
-				active = false;
+				set_active(false);
 				if (Global::quitting) {
 					return;
 				}
