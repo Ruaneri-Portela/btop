@@ -124,6 +124,10 @@ namespace Global {
 	atomic<bool> reload_conf (false);
 }
 
+namespace Runner {
+	static pthread_t runner_id;
+} // namespace Runner
+
 //* Handler for SIGWINCH and general resizing events, does nothing if terminal hasn't been resized unless force=true
 void term_resize(bool force) {
 	static atomic<bool> resizing (false);
@@ -359,7 +363,7 @@ namespace Runner {
 	atomic<bool> waiting (false);
 	atomic<bool> redraw (false);
 	atomic<bool> coreNum_reset (false);
-	
+
 	static inline auto set_active(bool value) noexcept {
 		active.store(value, std::memory_order_relaxed);
 		active.notify_all();
@@ -412,7 +416,6 @@ namespace Runner {
 	string empty_bg;
 	bool pause_output{};
 	sigset_t mask;
-	pthread_t runner_id;
 	pthread_mutex_t mtx;
 
 	enum debug_actions {
@@ -667,7 +670,7 @@ namespace Runner {
 
 			}
 			catch (const std::exception& e) {
-				Global::exit_error_msg = "Exception in runner thread -> " + string{e.what()};
+				Global::exit_error_msg = fmt::format("Exception in runner thread -> {}", e.what());
 				Global::thread_exception = true;
 				Input::interrupt();
 				stopping = true;
@@ -1060,7 +1063,7 @@ static auto configure_tty_mode(std::optional<bool> force_tty) {
 		Shared::init();
 	}
 	catch (const std::exception& e) {
-		Global::exit_error_msg = "Exception in Shared::init() -> " + string{e.what()};
+		Global::exit_error_msg = fmt::format("Exception in Shared::init() -> {}", e.what());
 		clean_quit(1);
 	}
 
@@ -1211,7 +1214,7 @@ static auto configure_tty_mode(std::optional<bool> force_tty) {
 		}
 	}
 	catch (const std::exception& e) {
-		Global::exit_error_msg = "Exception in main loop -> " + string{e.what()};
+		Global::exit_error_msg = fmt::format("Exception in main loop -> ", e.what());
 		clean_quit(1);
 	}
 	return 0;
