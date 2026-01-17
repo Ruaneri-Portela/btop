@@ -152,7 +152,7 @@ std::optional<bool> safe_cfbool_to_bool(CFBooleanRef bool_ref) {
 
 /*
 Below are functions that help with dictionary searches. They return compatible
-types in std if everything goes well. If not, they return nullpot if:
+types in std if everything goes well. If not, they return nullopt if:
 
 The dictionary is invalid.
 The entry does not exist.
@@ -206,7 +206,7 @@ std::optional<bool> safe_cfdictionary_to_bool(CFDictionaryRef dictionary, CFStri
     }
 
     CFTypeRef value = CFDictionaryGetValue(dictionary, key);
-    if (!value or CFGetTypeID(value) != CFBooleanGetTypeID()) {
+    if (not value or CFGetTypeID(value) != CFBooleanGetTypeID()) {
         return std::nullopt;
     }
 

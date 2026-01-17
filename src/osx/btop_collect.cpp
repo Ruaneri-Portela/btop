@@ -356,20 +356,9 @@ namespace Cpu {
 			return "";
 		}
 
-		if (freq < 1000000000) {
-			unsigned int freq_mhz = freq / 1000000;
-			return std::to_string(freq_mhz) + " MHz";
-		} 
-		else {
-			float freq_ghz = freq / 1000000000.0f;
-				
-			unsigned int int_part = static_cast<unsigned int>(freq_ghz);
-			unsigned int dec_part = static_cast<unsigned int>((freq_ghz - int_part) * 100);
-
-			char buf[16];
-			snprintf(buf, sizeof(buf), "%u.%02u GHz", int_part, dec_part);
-			return std::string(buf);
-		}
+		// Convert from Hz to GHz and return a numeric string without units
+		const double freq_ghz = static_cast<double>(freq) / 1000000000.0;
+		return fmt::format("{:.2f}", freq_ghz);
 	}
 
 	auto get_core_mapping() -> std::unordered_map<int, int> {
@@ -1513,50 +1502,48 @@ namespace Gpu {
 				return false;
 			}
 
-			for(size_t i = 0; i <= index ; i++){
-				if constexpr (is_init) {
-					gpus_slice->supported_functions = {
-						.gpu_utilization = true,
-						.mem_utilization = false,
-						.gpu_clock = IOReport::lib_handle ? true : false,
-						.mem_clock = false,
-						.pwr_usage = IOReport::lib_handle ? true : false,
-						.pwr_state = false,
-						.temp_info = false, // IOReport::LibHandle ? true : false
-						.mem_total = true,
-						.mem_used  = true,
-						.pcie_txrx = false,
-						.encoder_utilization = false,
-						.decoder_utilization = false						
-					};
-					gpus_slice->pwr_max_usage = 30'000; //? 30w
-				}
+			auto& io_gpus = io_gpu.get_gpus();
+			if (io_gpus.empty() || index >= io_gpus.size()) {
+				return false;
+			}
 
-				auto& io_gpus = io_gpu.get_gpus();
-				if (io_gpus.empty()) {
-					return false;
-				}
-				
-				io_gpus[i].refesh();
-				auto gpu_data = io_gpus[i].get_statistics();
+			if constexpr (is_init) {
+				gpus_slice->supported_functions = {
+					.gpu_utilization = true,
+					.mem_utilization = false,
+					.gpu_clock = IOReport::lib_handle ? true : false,
+					.mem_clock = false,
+					.pwr_usage = IOReport::lib_handle ? true : false,
+					.pwr_state = false,
+					.temp_info = false, // IOReport::LibHandle ? true : false
+					.mem_total = true,
+					.mem_used  = true,
+					.pcie_txrx = false,
+					.encoder_utilization = false,
+					.decoder_utilization = false
+				};
+				gpus_slice->pwr_max_usage = 30'000; //? 30w
+			}
 
-				gpus_slice->gpu_percent.at("gpu-totals").push_back(gpu_data.device_utilization);
+			io_gpus[index].refresh();
+			auto gpu_data = io_gpus[index].get_statistics();
 
-				gpus_slice->mem_total = gpu_data.alloc_system_memory;
-				gpus_slice->mem_used  = gpu_data.in_use_system_memory;
-				long long mem_percent = 0;
-				if (gpus_slice->mem_total > 0) {
-					mem_percent = static_cast<long long>((static_cast<double>(gpus_slice->mem_used) / static_cast<double>(gpus_slice->mem_total)) * 100.0);
-				}
-				gpus_slice->gpu_percent.at("gpu-vram-totals").push_back(mem_percent);
-				//gpus_slice->mem_utilization_percent.push_back(mem_percent);
+			gpus_slice->gpu_percent.at("gpu-totals").push_back(gpu_data.device_utilization);
 
-				if(IOReport::lib_handle) {
-					gpus_slice->gpu_percent.at("gpu-pwr-totals").push_back(gpu_data.milliwatts);
-					gpus_slice->pwr_usage = gpu_data.milliwatts;
-					gpus_slice->gpu_clock_speed = gpu_data.gpu_frequency / 1'000'000;
-					//gpus_slice->temp.push_back( gpu_data.temp_c);
-				}
+			gpus_slice->mem_total = gpu_data.alloc_system_memory;
+			gpus_slice->mem_used  = gpu_data.in_use_system_memory;
+			long long mem_percent = 0;
+			if (gpus_slice->mem_total > 0) {
+				mem_percent = static_cast<long long>((static_cast<double>(gpus_slice->mem_used) / static_cast<double>(gpus_slice->mem_total)) * 100.0);
+			}
+			gpus_slice->gpu_percent.at("gpu-vram-totals").push_back(mem_percent);
+			//gpus_slice->mem_utilization_percent.push_back(mem_percent);
+
+			if(IOReport::lib_handle) {
+				gpus_slice->gpu_percent.at("gpu-pwr-totals").push_back(gpu_data.milliwatts);
+				gpus_slice->pwr_usage = gpu_data.milliwatts;
+				gpus_slice->gpu_clock_speed = gpu_data.gpu_frequency / 1'000'000;
+				//gpus_slice->temp.push_back( gpu_data.temp_c);
 			}
             
             return true;
@@ -1565,7 +1552,7 @@ namespace Gpu {
     } // namespace IOAccelerator
 
 
-	//? Full based (copyed) on linux (intel/amd) gpu collect
+	//? Full based (copied) on linux (intel/amd) gpu collect
     auto collect(bool no_update) -> std::vector<gpu_info>& {
         if (Runner::stopping || (no_update && !gpus.empty()))
             return gpus;

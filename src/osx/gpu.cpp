@@ -181,7 +181,7 @@ GPUActivities::GPUActivities(io_object_t entry) {
 }
 
 //? Converts each entry to its value in the struct
-void GPU::map_ley_to_performace_statistics(const std::string &key, int64_t value) {
+void GPU::map_key_to_performance_statistics(const std::string &key, int64_t value) {
     static const std::unordered_map<std::string, int64_t PerformanceStatistics::*>map = {
             {"Alloc system memory", &PerformanceStatistics::alloc_system_memory},
             {"Allocated PB Size", &PerformanceStatistics::allocated_pb_size},
@@ -275,7 +275,7 @@ bool GPU::apple_arm_io_device_interator_callback(io_object_t device, void *data)
             }
 
             self->max_freq = max_freq;
-            self->mav_voltage = max_voltage;
+            self->max_voltage = max_voltage;
 
             std::sort(self->gpu_table.begin(), self->gpu_table.end(),[](const auto &a, const auto &b) {
                           return std::get<0>(a) < std::get<0>(b);
@@ -346,7 +346,7 @@ void GPU::lookup(io_object_t io_accelerator) {
 
             auto value = safe_cfnumber_to_int64(static_cast<CFNumberRef>(values[i]));
             if (key) {
-                map_ley_to_performace_statistics(*key, *value);
+                map_key_to_performance_statistics(*key, *value);
             }
         }
 
@@ -585,7 +585,7 @@ void GPU::parser_channels(CFDictionaryRef delta, double elapsedSeconds) {
 }
 
 //? Reloads the GPU class data
-bool GPU::refesh() {
+bool GPU::refresh() {
     //? With the path stored in memory, we can remove the entire GPU without
     // having to iterate through the children again.
     io_object_t ioAccelerator = IORegistryEntryFromPath(kIOMainPortDefault, io_path.c_str());

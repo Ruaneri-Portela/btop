@@ -37,8 +37,8 @@ class GPUActivities {
     std::vector<Usage> usage;
     pid_t proc;
     std::string name;
-    int64_t comand_queue_count;
-    int64_t comand_queue_count_max;
+    int64_t command_queue_count;
+    int64_t command_queue_count_max;
     GPUActivities(io_object_t io_accelerator_children);
 
   private:
@@ -86,11 +86,11 @@ class GPU {
 
     std::vector<std::tuple<uint32_t, uint32_t>> gpu_table;
     uint32_t max_freq = 0;
-    uint32_t mav_voltage = 0;
+    uint32_t max_voltage = 0;
 
     void lookup_process_percentage();
     void lookup(io_object_t ioAccelerator);
-    void map_ley_to_performace_statistics(const std::string &key, int64_t value);
+    void map_key_to_performance_statistics(const std::string &key, int64_t value);
     void parser_channels(CFDictionaryRef delta, double elapsed_seconds);
 
     static bool children_iterator_callback(io_object_t object, void *data);
@@ -112,7 +112,7 @@ class GPU {
     const std::string &get_name() const;
     const int64_t &get_core_count() const;
 
-    bool refesh();
+    bool refresh();
 
     ~GPU();
 };
