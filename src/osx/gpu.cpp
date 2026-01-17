@@ -38,7 +38,7 @@ static uint64_t get_time_ns() {
     return mach_absolute_time() * timebase.numer / timebase.denom;
 }
 
-//? This non work with same reason what in sensors.cpp
+//? This does not work for the same reason as in sensors.cpp
 static double get_gpu_temperature() {
     CFDictionaryRef matching = create_hid_matching(0xff00, 5);
     IOHIDEventSystemClientRef system = IOHIDEventSystemClientCreate(kCFAllocatorDefault);
@@ -81,7 +81,7 @@ static double get_gpu_temperature() {
 }
 
 void GPUActivities::map_key_to_usage_number(GPUActivities::Usage &usage, const std::string &key, int64_t value) {
-    static const std::unordered_map<std::string,int64_t GPUActivities::Usage::*> map = {
+    static const std::unordered_map<std::string, int64_t GPUActivities::Usage::*> map = {
             {"accumulatedGPUTime", &GPUActivities::Usage::accumulated_gpu_time},
             {"lastSubmittedTime", &GPUActivities::Usage::last_submitted_time},
     };
@@ -143,7 +143,7 @@ GPUActivities::GPUActivities(io_object_t entry) {
     for (CFIndex i = 0; i < count; ++i) {
         CFTypeRef item = CFArrayGetValueAtIndex(app_usage_array, i);
 
-        if (!item or CFGetTypeID(item) != CFDictionaryGetTypeID()) continue;
+        if (not item or CFGetTypeID(item) != CFDictionaryGetTypeID()) continue;
 
         CFDictionaryRef usage_stats = static_cast<CFDictionaryRef>(item);
         if (usage_stats) {
@@ -367,7 +367,7 @@ void GPU::lookup(io_object_t io_accelerator) {
 }
 
 GPU::GPU(io_object_t ioAccelerator) {
-    // Save full path to fast refesh on some stats, eg. memeory
+    // Save full path to fast refresh on some stats, eg. memory
     io_name_t path;
     if (IORegistryEntryGetPath(ioAccelerator, kIOServicePlane, path) != KERN_SUCCESS){
         return;
@@ -573,10 +573,10 @@ void GPU::parser_channels(CFDictionaryRef delta, double elapsedSeconds) {
 
     //? Compute power in mW
     if (elapsedSeconds > 0 and n_joule > 0) {
-        statistics.milliwatts = static_cast<double>(n_joule) * 1e-6 / elapsedSeconds;
+        statistics.milliwatts = static_cast<int64_t>(static_cast<double>(n_joule) * 1e-6 / elapsedSeconds);
     }
 
-    //? This no work in my M4 pro
+    //? This does not work on my M4 Pro
     //? Calculate average temperature
     //? IOReport temperature values are in centiCelsius (hundredths of a degree)
     if (temp_count > 0 and temp_sum > 0) {
