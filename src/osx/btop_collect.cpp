@@ -357,7 +357,7 @@ namespace Cpu {
 		}
 
 		// Convert from Hz to GHz and return a numeric string without units
-		const double freq_ghz = static_cast<double>(freq) / 1000000000.0;
+		const auto freq_ghz = static_cast<double>(freq) / 1'000'000'000.0;
 		return fmt::format("{:.2f}", freq_ghz);
 	}
 
@@ -1470,8 +1470,8 @@ namespace Gpu {
     namespace IOAccelerator {
         //? Initialize Apple Silicon GPU monitoring Although the chips always have 1 GPU, I assume we can reuse them later on Intel Macs.
         bool init() {
-            const size_t index = gpus.size();
-            auto & io_gpus = io_gpu.get_gpus();
+            const auto index = gpus.size();
+            auto& io_gpus = io_gpu.get_gpus();
 			device_count += io_gpus.size();
 
 			if (io_gpus.empty()) {
@@ -1482,7 +1482,7 @@ namespace Gpu {
 
 			for(size_t i = 0; i < io_gpus.size() ; i++){
 				gpus.emplace_back();  
-				std::string name = fmt::format("{} ({})", io_gpus[i].get_name(), io_gpus[i].get_core_count());
+				auto name = fmt::format("{} ({})", io_gpus[i].get_name(), io_gpus[i].get_core_count());
             	gpu_names.emplace_back(name);
 				collect<true>(&gpus[index], i);
 			}
@@ -1532,7 +1532,7 @@ namespace Gpu {
 
 			gpus_slice->mem_total = gpu_data.alloc_system_memory;
 			gpus_slice->mem_used  = gpu_data.in_use_system_memory;
-			long long mem_percent = 0;
+			auto mem_percent = 0LL;
 			if (gpus_slice->mem_total > 0) {
 				mem_percent = static_cast<long long>((static_cast<double>(gpus_slice->mem_used) / static_cast<double>(gpus_slice->mem_total)) * 100.0);
 			}

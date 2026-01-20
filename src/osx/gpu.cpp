@@ -80,7 +80,7 @@ static double get_gpu_temperature() {
     return gpu_temp;
 }
 
-void GPUActivities::map_key_to_usage_number(GPUActivities::Usage &usage, const std::string &key, int64_t value) {
+void GPUActivities::map_key_to_usage_number(GPUActivities::Usage& usage, const std::string& key, int64_t value) {
     static const std::unordered_map<std::string, int64_t GPUActivities::Usage::*> map = {
             {"accumulatedGPUTime", &GPUActivities::Usage::accumulated_gpu_time},
             {"lastSubmittedTime", &GPUActivities::Usage::last_submitted_time},
@@ -156,7 +156,7 @@ GPUActivities::GPUActivities(io_object_t entry) {
                                          values.data());
             GPUActivities::Usage new_usage{};
             for (CFIndex i = 0; i < count; ++i) {
-                CFStringRef keyRef = static_cast<CFStringRef>(keys[i]);
+                auto key_ref = static_cast<CFStringRef>(keys[i]);
 
                 auto key = safe_cfstring_to_std_string(keyRef);
                 if (!key) continue;
