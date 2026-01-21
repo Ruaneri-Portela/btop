@@ -16,16 +16,18 @@
    tab-size = 4
 */
 #pragma once
-#include <CoreFoundation/CoreFoundation.h>
-#include <IOKit/IOTypes.h>
+#include <chrono>
 #include <cstdint>
-#include <string>
 #include <cstring>
-#include <sys/_types/_pid_t.h>
+#include <string>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
-#include <chrono>
+
+#include <sys/_types/_pid_t.h>
+
+#include <CoreFoundation/CoreFoundation.h>
+#include <IOKit/IOTypes.h>
 
 class GPUActivities {
   public:
@@ -43,8 +45,8 @@ class GPUActivities {
     GPUActivities(io_object_t io_accelerator_children);
 
   private:
-    static void map_key_to_usage_string(GPUActivities::Usage &usage, const std::string &key, const std::string &value);
-    static void map_key_to_usage_number(GPUActivities::Usage &usage, const std::string &key, int64_t value);
+    static void map_key_to_usage_string(GPUActivities::Usage& usage, const std::string& key, const std::string& value);
+    static void map_key_to_usage_number(GPUActivities::Usage& usage, const std::string& key, int64_t value);
 };
 
 class GPU {
@@ -77,7 +79,7 @@ class GPU {
 
     PerformanceStatistics statistics;
 
-    std::chrono::nanoseconds prev_gpu_elapsed{0};
+    std::chrono::nanoseconds prev_gpu_elapsed {0};
     uint64_t actual_gpu_internal_time = 0;
     uint64_t last_gpu_internal_time = 0;
 
@@ -92,15 +94,14 @@ class GPU {
 
     void lookup_process_percentage();
     void lookup(io_object_t ioAccelerator);
-    void map_key_to_performance_statistics(const std::string &key, int64_t value);
+    void map_key_to_performance_statistics(const std::string& key, int64_t value);
     void parser_channels(CFDictionaryRef delta, double elapsed_seconds);
 
-    static bool children_iterator_callback(io_object_t object, void *data);
+    static bool children_iterator_callback(io_object_t object, void* data);
 
-    static bool apple_arm_io_device_interator_callback(io_object_t object,
-                                                 void *data);
+    static bool apple_arm_io_device_interator_callback(io_object_t object, void* data);
 
-    std::chrono::nanoseconds prev_sample_time{0};
+    std::chrono::nanoseconds prev_sample_time {0};
     CFTypeRef subscription = nullptr;
     CFMutableDictionaryRef channels = nullptr;
     CFDictionaryRef prev_sample = nullptr;
@@ -108,11 +109,10 @@ class GPU {
   public:
     GPU(io_object_t io_accelerator);
 
-    const std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> &
-    get_activities() const;
-    const PerformanceStatistics &get_statistics() const;
-    const std::string &get_name() const;
-    const int64_t &get_core_count() const;
+    const std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>>& get_activities() const;
+    const PerformanceStatistics& get_statistics() const;
+    const std::string& get_name() const;
+    const int64_t& get_core_count() const;
 
     bool refresh();
 
@@ -122,10 +122,10 @@ class GPU {
 class IOGPU {
   private:
     std::vector<GPU> gpus;
-    static bool iterator_gpu_callback(io_object_t object, void *data);
+    static bool iterator_gpu_callback(io_object_t object, void* data);
     static void ioReportTryLoad();
 
   public:
     IOGPU();
-    std::vector<GPU> &get_gpus();
+    std::vector<GPU>& get_gpus();
 };
