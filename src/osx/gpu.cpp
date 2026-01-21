@@ -16,8 +16,6 @@
    indent = tab
    tab-size = 4
 */
-#include <mach/mach_time.h>
-
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -25,18 +23,8 @@
 #include <tuple>
 #include <unordered_map>
 #include <utility>
-
 #include "gpu.hpp"
 #include "iokit.hpp"
-
-//? Others
-static uint64_t get_time_ns() {
-    static mach_timebase_info_data_t timebase = {0, 0};
-    if (timebase.denom == 0) {
-        mach_timebase_info(&timebase);
-    }
-    return mach_absolute_time() * timebase.numer / timebase.denom;
-}
 
 //? This does not work for the same reason as in sensors.cpp
 static double get_gpu_temperature() {
@@ -158,17 +146,17 @@ GPUActivities::GPUActivities(io_object_t entry) {
             for (CFIndex i = 0; i < count; ++i) {
                 auto key_ref = static_cast<CFStringRef>(keys[i]);
 
-                auto key = safe_cfstring_to_std_string(keyRef);
+                auto key = safe_cfstring_to_std_string(key_ref);
                 if (!key) continue;
 
-                auto number = safe_cfdictionary_to_int64(usage_stats, keyRef);
+                auto number = safe_cfdictionary_to_int64(usage_stats, key_ref);
                 if (number.has_value()) {
                     map_key_to_usage_number(new_usage, *key, *number);
                     continue;
                 }
 
                 auto string =
-                    safe_cfdictionary_to_std_string(usage_stats, keyRef);
+                    safe_cfdictionary_to_std_string(usage_stats, key_ref);
                 if (string.has_value()) {
                     map_key_to_usage_string(new_usage, *key, *string);
                     continue;
@@ -292,8 +280,9 @@ bool GPU::apple_arm_io_device_interator_callback(io_object_t device, void *data)
 void GPU::lookup_process_percentage() {
     int64_t delta_gpu_internal_time = actual_gpu_internal_time - last_gpu_internal_time;
 
-    uint64_t actual_gpu_seconds_elapsed = get_time_ns();
-    prev_gpu_elapsed_seconds = actual_gpu_seconds_elapsed;
+    std::chrono::nanoseconds actual_gpu_elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch());
+
+    prev_gpu_elapsed = actual_gpu_elapsed;
 
     if (!last_activities.empty() and delta_gpu_internal_time > 0) {
         double denom = static_cast<double>(delta_gpu_internal_time);
@@ -435,9 +424,9 @@ GPU::GPU(io_object_t ioAccelerator) {
         }
 
         //? Take Initial Sample
-        prevSample = IOReport::CreateSamples(subscription, channels, nullptr);
+        prev_sample = IOReport::CreateSamples(subscription, channels, nullptr);
         CFRelease(sub_channels);
-        prev_sample_time = get_time_ns();
+        prev_sample_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch());
     }
     lookup_process_percentage();
     return;
@@ -599,21 +588,21 @@ bool GPU::refresh() {
 
     //? IO Report provide Clock, Wattage and Temperature (but the last not work)
     if (IOReport::lib_handle) {
-        CFDictionaryRef currentSample = IOReport::CreateSamples(subscription, channels, nullptr);
+        CFDictionaryRef current_sample = IOReport::CreateSamples(subscription, channels, nullptr);
 
-        uint64_t currentTime = get_time_ns();
-        double elapsedSeconds = (currentTime - prev_sample_time) / 1e9;
-
-        CFDictionaryRef delta = IOReport::CreateSamplesDelta(prevSample, currentSample, nullptr);
+        auto currentTime = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch());
+        auto delta_time = currentTime - prev_sample_time;
+        auto delta_ref = std::chrono::duration<double>(delta_time).count();
+        CFDictionaryRef delta = IOReport::CreateSamplesDelta(prev_sample, current_sample, nullptr);
 
         if (delta) {
-            parser_channels(delta, elapsedSeconds);
+            parser_channels(delta, delta_ref);
             CFRelease(delta);
         }
 
-        if (currentSample) {
-            CFRelease(prevSample);
-            prevSample = currentSample;
+        if (current_sample) {
+            CFRelease(prev_sample);
+            prev_sample = current_sample;
         }
         prev_sample_time = currentTime;
 
@@ -639,8 +628,8 @@ const std::string &GPU::get_name() const { return name; }
 const int64_t &GPU::get_core_count() const { return core_count; }
 
 GPU::~GPU() {
-    if (prevSample) { 
-        CFRelease(prevSample);
+    if (prev_sample) { 
+        CFRelease(prev_sample);
     }
 
     if (channels){ 

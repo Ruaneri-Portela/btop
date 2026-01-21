@@ -25,6 +25,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <vector>
+#include <chrono>
 
 class GPUActivities {
   public:
@@ -76,9 +77,10 @@ class GPU {
 
     PerformanceStatistics statistics;
 
-    uint64_t prev_gpu_elapsed_seconds = 0;
+    std::chrono::nanoseconds prev_gpu_elapsed{0};
     uint64_t actual_gpu_internal_time = 0;
     uint64_t last_gpu_internal_time = 0;
+
     std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> last_activities;
     std::unordered_map<pid_t, std::tuple<GPUActivities, uint64_t, double>> actual_activities;
 
@@ -98,10 +100,10 @@ class GPU {
     static bool apple_arm_io_device_interator_callback(io_object_t object,
                                                  void *data);
 
-    uint64_t prev_sample_time = 0;
+    std::chrono::nanoseconds prev_sample_time{0};
     CFTypeRef subscription = nullptr;
     CFMutableDictionaryRef channels = nullptr;
-    CFDictionaryRef prevSample = nullptr;
+    CFDictionaryRef prev_sample = nullptr;
 
   public:
     GPU(io_object_t io_accelerator);
